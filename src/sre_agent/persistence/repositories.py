@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from sre_agent.governance.authorization import ResourceAuthorizationFact
 from sre_agent.governance.dto import (
+    CATALOG_TYPES,
     AuditEvent,
     CredentialReference,
     Grant,
@@ -680,15 +681,7 @@ class CatalogRepository:
     routing or secrets.
     """
 
-    CATALOG_TYPES = (
-        "llm_model",
-        "mcp_server",
-        "mcp_tool",
-        "skill",
-        "bok_collection",
-        "incident_workflow",
-        "service_operation",
-    )
+    CATALOG_TYPES = CATALOG_TYPES
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session

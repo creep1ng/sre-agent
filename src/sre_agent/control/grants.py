@@ -37,7 +37,7 @@ from sre_agent.gate.errors import GovernedError
 from sre_agent.gate.pipeline import Admission, Released
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.responses import TransactionalAuditStore
-from sre_agent.governance.dto import Grant, PrincipalContext, Resource
+from sre_agent.governance.dto import GRANT_ADMITTED_ACTIONS, Grant, PrincipalContext, Resource
 from sre_agent.persistence.repositories import (
     GrantConflictError,
     GrantRepository,
@@ -62,46 +62,6 @@ CONFLICTS = {
         "grant_conflict",
         "An active grant with this principal, action and resource already exists.",
     ),
-}
-
-# Admitted grant actions per resource contract (#423 CA3). Exact membership in
-# the per-type sets below: the resource-catalog owner/state/action matrix
-# (schemas/releases/*/conformance/resource-catalog-matrix.yaml) plus the
-# vocabularies the runtime actually evaluates: bare "invoke" on skill
-# (gateway/skills.py) alongside skill.invoke, admin.read/admin.write over
-# administrative_control (CONTROL_SCOPES), and the run.*, alert.*,
-# incident.declare and change.* (#770) actions over incident_workflow
-# (agent/api/authorization.v1.yaml and agent/api/triage.openapi.yaml). Dotted refinements such
-# as "invoke.delete" or "run.start.unpublished" are absent from those closed contracts and the
-# engine matches grant.action exactly, so they are rejected without mutation.
-# This is a pure lookup: it never touches a repository, so a denied caller
-# still receives 403 before any target access.
-# mitigation.execute over service_operation comes from the `governance` block of
-# schemas/executor/1.0.0/deploy-executor.yaml (#722).
-GRANT_ADMITTED_ACTIONS: dict[str, frozenset[str]] = {
-    "llm_model": frozenset({"admin.read", "admin.write", "invoke"}),
-    "mcp_server": frozenset({"admin.write", "mcp.discovery", "mcp.invoke"}),
-    "mcp_tool": frozenset({"admin.write", "mcp.discovery", "mcp.invoke"}),
-    "skill": frozenset({"admin.write", "skill.discovery", "skill.read", "skill.invoke", "invoke"}),
-    "bok_collection": frozenset({"admin.write", "bok.discovery", "bok.search", "bok.read"}),
-    "incident_workflow": frozenset(
-        {
-            "run.start",
-            "run.read",
-            "run.command",
-            "run.approve",
-            "run.read_context",
-            "alert.read",
-            "alert.triage",
-            "alert.dismiss",
-            "alert.associate",
-            "incident.declare",
-            "change.read",
-            "change.write",
-        }
-    ),
-    "administrative_control": frozenset({"admin.read", "admin.write"}),
-    "service_operation": frozenset({"mitigation.execute"}),
 }
 
 

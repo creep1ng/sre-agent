@@ -1,4 +1,5 @@
 from functools import partial
+from typing import get_args
 
 import sqlalchemy as sa
 from sqlalchemy import (
@@ -18,6 +19,14 @@ from sqlalchemy.orm import DeclarativeBase, mapped_column
 from sqlalchemy.sql import func
 from sqlalchemy.sql import text as sql_text
 from sqlalchemy.sql.schema import ForeignKeyConstraint, UniqueConstraint
+
+from sre_agent.governance.dto import (
+    CATALOG_SOURCE,
+    CATALOG_STATUSES,
+    CATALOG_VISIBILITIES,
+    CatalogSource,
+    ResourceType,
+)
 
 required = partial(mapped_column, nullable=False)
 
@@ -68,16 +77,35 @@ class CredentialRow(Base):
     revoked_at = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+def _among(column: str, values: tuple[str, ...]) -> str:
+    return f"{column} IN (" + ",".join(f"'{value}'" for value in values) + ")"
+
+
+def _owned_by_source() -> str:
+    """Each resource type carries the catalog source that owns it; administrative rows none."""
+    owners: dict[str | None, list[str]] = {}
+    for resource_type in get_args(ResourceType):
+        owners.setdefault(CATALOG_SOURCE.get(resource_type), []).append(resource_type)
+    clauses = []
+    for source, types in owners.items():
+        if len(types) == 1:
+            kind = f"resource_type='{types[0]}'"
+        else:
+            kind = _among("resource_type", tuple(types))
+        owned = f"source='{source}'" if source else "source IS NULL"
+        clauses.append(f"({kind} AND {owned})")
+    return " OR ".join(clauses)
+
+
 class ResourceRow(Base):
     __tablename__ = "resources"
     __table_args__ = (
         CK(
-            "resource_type IN ('llm_model','mcp_server','mcp_tool','skill','bok_collection',"
-            "'administrative_control','incident_workflow','service_operation')",
+            _among("resource_type", get_args(ResourceType)),
             name="ck_resources_type",
         ),
         CK(
-            "status IN ('registered','draft','published','indexing','active','inactive','revoked')",
+            _among("status", CATALOG_STATUSES),
             name="ck_resources_status",
         ),
         CK(
@@ -98,22 +126,15 @@ class ResourceRow(Base):
             name="ck_resources_catalog_projection",
         ),
         CK(
-            "source IS NULL OR source IN "
-            "('model_alias','mcp','skill','bok','incident_workflow','deploy_executor')",
+            "source IS NULL OR " + _among("source", get_args(CatalogSource)),
             name="ck_resources_catalog_source",
         ),
         CK(
-            "visibility IS NULL OR visibility IN ('public','private','hidden')",
+            "visibility IS NULL OR " + _among("visibility", CATALOG_VISIBILITIES),
             name="ck_resources_catalog_visibility",
         ),
         CK(
-            "(resource_type='llm_model' AND source='model_alias') OR "
-            "(resource_type IN ('mcp_server','mcp_tool') AND source='mcp') OR "
-            "(resource_type='skill' AND source='skill') OR "
-            "(resource_type='bok_collection' AND source='bok') OR "
-            "(resource_type='administrative_control' AND source IS NULL) OR "
-            "(resource_type='incident_workflow' AND source='incident_workflow') OR "
-            "(resource_type='service_operation' AND source='deploy_executor')",
+            _owned_by_source(),
             name="ck_resources_catalog_owner",
         ),
         UniqueConstraint("model_alias_id", name="uq_resources_model_alias_id"),

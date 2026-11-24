@@ -1,6 +1,6 @@
 """Strict Pydantic projections of the authoritative HT-01 contracts."""
 
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, get_args
 from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -23,6 +23,47 @@ ResourceType = Literal[
     "service_operation",
 ]
 ControlAction = Literal["admin.read", "admin.write"]
+
+# Admitted grant actions per resource contract (#423 CA3). Exact membership in
+# the per-type sets below: the resource-catalog owner/state/action matrix
+# (schemas/releases/*/conformance/resource-catalog-matrix.yaml) plus the
+# vocabularies the runtime actually evaluates: bare "invoke" on skill
+# (gateway/skills.py) alongside skill.invoke, admin.read/admin.write over
+# administrative_control (CONTROL_SCOPES), and the run.*, alert.*,
+# incident.declare and change.* (#770) actions over incident_workflow
+# (agent/api/authorization.v1.yaml and agent/api/triage.openapi.yaml). Dotted refinements such
+# as "invoke.delete" or "run.start.unpublished" are absent from those closed contracts and the
+# engine matches grant.action exactly, so they are rejected without mutation.
+# This is a pure lookup: it never touches a repository, so a denied caller
+# still receives 403 before any target access.
+# mitigation.execute over service_operation comes from the `governance` block of
+# schemas/executor/1.0.0/deploy-executor.yaml (#722).
+GRANT_ADMITTED_ACTIONS: dict[str, frozenset[str]] = {
+    "llm_model": frozenset({"admin.read", "admin.write", "invoke"}),
+    "mcp_server": frozenset({"admin.write", "mcp.discovery", "mcp.invoke"}),
+    "mcp_tool": frozenset({"admin.write", "mcp.discovery", "mcp.invoke"}),
+    "skill": frozenset({"admin.write", "skill.discovery", "skill.read", "skill.invoke", "invoke"}),
+    "bok_collection": frozenset({"admin.write", "bok.discovery", "bok.search", "bok.read"}),
+    "incident_workflow": frozenset(
+        {
+            "run.start",
+            "run.read",
+            "run.command",
+            "run.approve",
+            "run.read_context",
+            "alert.read",
+            "alert.triage",
+            "alert.dismiss",
+            "alert.associate",
+            "incident.declare",
+            "change.read",
+            "change.write",
+        }
+    ),
+    "administrative_control": frozenset({"admin.read", "admin.write"}),
+    "service_operation": frozenset({"mitigation.execute"}),
+}
+
 AuditRefValue = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 ReasonCode = Literal[
     "audit_unavailable",
@@ -125,6 +166,30 @@ CatalogStatus = Literal[
     "registered", "draft", "published", "indexing", "active", "inactive", "revoked"
 ]
 CatalogVisibility = Literal["public", "private", "hidden"]
+# The catalog's one vocabulary: the source that owns each catalog type and the states an entry of
+# it may be in. The control plane, the catalog repository and the database CHECKs derive from
+# these; the release schemas publish the same values.
+CATALOG_TYPES: tuple[str, ...] = get_args(CatalogResourceType)
+CATALOG_STATUSES: tuple[str, ...] = get_args(CatalogStatus)
+CATALOG_VISIBILITIES: tuple[str, ...] = get_args(CatalogVisibility)
+CATALOG_SOURCE: dict[str, str] = {
+    "llm_model": "model_alias",
+    "mcp_server": "mcp",
+    "mcp_tool": "mcp",
+    "skill": "skill",
+    "bok_collection": "bok",
+    "incident_workflow": "incident_workflow",
+    "service_operation": "deploy_executor",
+}
+CATALOG_STATES: dict[str, tuple[str, ...]] = {
+    "llm_model": ("active", "inactive"),
+    "mcp_server": ("registered", "active", "inactive", "revoked"),
+    "mcp_tool": ("registered", "active", "inactive", "revoked"),
+    "skill": ("draft", "published", "active", "inactive", "revoked"),
+    "bok_collection": ("draft", "indexing", "active", "inactive", "revoked"),
+    "incident_workflow": ("active", "inactive"),
+    "service_operation": ("active", "inactive"),
+}
 CatalogId = Annotated[
     str, Field(min_length=1, max_length=200, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$")
 ]
@@ -205,27 +270,9 @@ class ResourceCatalogEntry(StrictDTO):
 
     @model_validator(mode="after")
     def validate_owner_source_status(self) -> "ResourceCatalogEntry":
-        expected_source: dict[str, str] = {
-            "llm_model": "model_alias",
-            "mcp_server": "mcp",
-            "mcp_tool": "mcp",
-            "skill": "skill",
-            "bok_collection": "bok",
-            "incident_workflow": "incident_workflow",
-            "service_operation": "deploy_executor",
-        }
-        if self.source != expected_source[self.resource_type]:
+        if self.source != CATALOG_SOURCE[self.resource_type]:
             raise ValueError("catalog source does not match resource type")
-        allowed: dict[str, set[str]] = {
-            "llm_model": {"active", "inactive"},
-            "mcp_server": {"registered", "active", "inactive", "revoked"},
-            "mcp_tool": {"registered", "active", "inactive", "revoked"},
-            "skill": {"draft", "published", "active", "inactive", "revoked"},
-            "bok_collection": {"draft", "indexing", "active", "inactive", "revoked"},
-            "incident_workflow": {"active", "inactive"},
-            "service_operation": {"active", "inactive"},
-        }
-        if self.status not in allowed[self.resource_type]:
+        if self.status not in CATALOG_STATES[self.resource_type]:
             raise ValueError("catalog status is not permitted for this resource type")
         if len(set(self.discoverability.tags)) != len(self.discoverability.tags):
             raise ValueError("catalog tags must be unique")

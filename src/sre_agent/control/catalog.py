@@ -38,7 +38,17 @@ from sre_agent.control.routing import (
 from sre_agent.gate.pipeline import Admission, Released
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.responses import TransactionalAuditStore
-from sre_agent.governance.dto import PrincipalContext, ResourceCatalogEntry
+from sre_agent.governance.dto import (
+    CATALOG_SOURCE,
+    CATALOG_STATES,
+    CATALOG_STATUSES,
+    CATALOG_TYPES,
+    CATALOG_VISIBILITIES,
+    CatalogStatus,
+    CatalogVisibility,
+    PrincipalContext,
+    ResourceCatalogEntry,
+)
 from sre_agent.persistence.repositories import (
     CatalogRepository,
     IdempotencyConflictError,
@@ -51,35 +61,12 @@ CREATE = CONTROL[("POST", "/v1/catalog/resources")]
 LIST = CONTROL[("GET", "/v1/catalog/resources")]
 READ = CONTROL[("GET", "/v1/catalog/resources/{type}/{id}")]
 RESOURCE_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$"
-RESOURCE_TYPES = {
-    "llm_model",
-    "mcp_server",
-    "mcp_tool",
-    "skill",
-    "bok_collection",
-    "incident_workflow",
-    "service_operation",
-}
-STATUS_ORDER = ("registered", "draft", "published", "indexing", "active", "inactive", "revoked")
-STATUSES = set(STATUS_ORDER)
-VISIBILITIES = {"public", "private", "hidden"}
-# The source each catalog-created type must name, and the states it may start in.
-EXPECTED_SOURCE = {
-    "mcp_server": "mcp",
-    "mcp_tool": "mcp",
-    "skill": "skill",
-    "bok_collection": "bok",
-    "incident_workflow": "incident_workflow",
-    "service_operation": "deploy_executor",
-}
-ALLOWED_STATUS: dict[str, set[str]] = {
-    "mcp_server": {"registered", "active", "inactive", "revoked"},
-    "mcp_tool": {"registered", "active", "inactive", "revoked"},
-    "skill": {"draft", "published", "active", "inactive", "revoked"},
-    "bok_collection": {"draft", "indexing", "active", "inactive", "revoked"},
-    "incident_workflow": {"active", "inactive"},
-    "service_operation": {"active", "inactive"},
-}
+RESOURCE_TYPES = set(CATALOG_TYPES)
+STATUSES = set(CATALOG_STATUSES)
+VISIBILITIES = set(CATALOG_VISIBILITIES)
+# The types an administrator creates here: llm_model is created as a model alias.
+CREATED_TYPES = tuple(kind for kind in CATALOG_TYPES if kind != "llm_model")
+CREATED_SOURCES = tuple(dict.fromkeys(CATALOG_SOURCE[kind] for kind in CREATED_TYPES))
 Tag = Annotated[str, Field(min_length=1, max_length=50, pattern=r"^[a-z0-9][a-z0-9._-]*$")]
 ResourceId = Annotated[str, Field(min_length=1, max_length=200, pattern=RESOURCE_ID_PATTERN)]
 
@@ -91,7 +78,7 @@ HIDDEN, INACTIVE = ("hidden",), ("inactive",)
 class CatalogDiscoverabilityCreate(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
     display_name: Annotated[str, Field(min_length=1, max_length=200)]
-    visibility: Literal["public", "private", "hidden"]
+    visibility: CatalogVisibility
     description: Annotated[str, Field(max_length=500)]
     tags: Annotated[list[Tag], Field(max_length=16)]
 
@@ -106,19 +93,12 @@ class CatalogCreate(BaseModel):
     """
 
     model_config = ConfigDict(strict=True, extra="forbid")
-    resource_type: Literal[
-        "mcp_server",
-        "mcp_tool",
-        "skill",
-        "bok_collection",
-        "incident_workflow",
-        "service_operation",
-    ]
+    resource_type: Literal[CREATED_TYPES]  # type: ignore[valid-type]
     resource_id: ResourceId
     owner_id: Identifier
-    source: Literal["mcp", "skill", "bok", "incident_workflow", "deploy_executor"]
+    source: Literal[CREATED_SOURCES]  # type: ignore[valid-type]
     source_ref: ResourceId
-    status: Literal["registered", "draft", "published", "indexing", "active", "inactive", "revoked"]
+    status: CatalogStatus
     discoverability: CatalogDiscoverabilityCreate
 
 
@@ -224,9 +204,9 @@ def _created(raw: Any) -> CatalogCreate:
     except ValidationError:
         raise INVALID from None
     tags = body.discoverability.tags
-    if len(set(tags)) != len(tags) or body.source != EXPECTED_SOURCE[body.resource_type]:
+    if len(set(tags)) != len(tags) or body.source != CATALOG_SOURCE[body.resource_type]:
         raise INVALID
-    if body.status not in ALLOWED_STATUS[body.resource_type]:
+    if body.status not in CATALOG_STATES[body.resource_type]:
         raise INVALID
     return body
 
@@ -351,8 +331,8 @@ def catalog_router(routes: CatalogRoutes) -> APIRouter:
             "parameters": [
                 _query("resource_type", {"enum": DOCUMENTED_TYPES}),
                 _query("owner_id", {"type": "string", "pattern": IDENTIFIER_PATTERN}),
-                _query("status", {"enum": list(STATUS_ORDER)}),
-                _query("visibility", {"enum": ["public", "private", "hidden"]}),
+                _query("status", {"enum": list(CATALOG_STATUSES)}),
+                _query("visibility", {"enum": list(CATALOG_VISIBILITIES)}),
                 LIMIT_PARAMETER,
             ],
             **FORBIDDEN_QUERY,
