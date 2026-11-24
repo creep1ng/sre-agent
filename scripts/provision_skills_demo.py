@@ -37,7 +37,7 @@ def _payload(response) -> dict:
 
 async def converge(service, bearer: str, body: dict) -> str:
     skill_id, version = body["skill_id"], body["version"]
-    published = await service.service.publish_skill_version(
+    published = await service.skills.publish_skill_version(
         body, bearer, f"setup-v1-skill-{skill_id}-{version}"
     )
     if published.status_code != 201:
@@ -48,7 +48,7 @@ async def converge(service, bearer: str, body: dict) -> str:
         raise RuntimeError(f"{skill_id}@{version}: deactivated by an admin, left inactive")
     if status.status_code == 404:
         # Published but never activated: the status contract only exposes active/inactive.
-        stored = await service.service.get_skill_version(skill_id, version, bearer)
+        stored = await service.skills.get_skill_version(skill_id, version, bearer)
         if stored.status_code != 200:
             raise RuntimeError(f"{skill_id}@{version}: version unreadable ({stored.status_code})")
         changed = await service.service.replace_skill_status(

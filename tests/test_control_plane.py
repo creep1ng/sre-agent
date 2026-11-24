@@ -30,6 +30,7 @@ from sre_agent.control.service import (
     _payload_sha256,
     control_router,
 )
+from sre_agent.control.skills import SkillRoutes, skills_router
 from sre_agent.gate.pipeline import Gate
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.governance.authorization import AuthorizationDenialCause, AuthorizationEvaluation
@@ -401,6 +402,7 @@ def _control_app(service, principals, credentials=None, grants=None) -> FastAPI:
     app.include_router(grants_router(grants or _stub_grants()))
     app.include_router(aliases_router(_stub_aliases()))
     app.include_router(catalog_router(_stub_catalog()))
+    app.include_router(skills_router(SkillRoutes.__new__(SkillRoutes)))
     app.include_router(control_router(service))
     return app
 
