@@ -1,6 +1,7 @@
 """Authorization-order proof for every Issue #147 control operation."""
 
 import asyncio
+import sys
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from unittest.mock import ANY, AsyncMock
@@ -9,10 +10,21 @@ import pytest
 from control_testkit import _Audit, _TargetAccessed
 
 from sre_agent.control.operations import CONTROL_SCOPES
+from sre_agent.control.principals import PrincipalRoutes
 from sre_agent.control.service import ControlService
+from sre_agent.gate.pipeline import Gate, Scope
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.governance.authorization import AuthorizationDenialCause, AuthorizationEvaluation
 from sre_agent.governance.dto import PolicyDecision, Principal, PrincipalContext
+
+REPOSITORIES = (
+    "PrincipalRepository",
+    "CredentialRepository",
+    "GrantRepository",
+    "IdempotencyRepository",
+    "ModelAliasRepository",
+    "CatalogRepository",
+)
 
 
 def _context() -> PrincipalContext:
@@ -34,34 +46,6 @@ def _context() -> PrincipalContext:
 @pytest.mark.parametrize(
     ("operation", "invoke", "expected_status"),
     [
-        (
-            ("POST", "/v1/principals"),
-            lambda service: service.create_principal(
-                {"principal_id": "target-human", "kind": "human", "display_name": "Target"},
-                "Bearer safe-key",
-                "create-target-human",
-            ),
-            403,
-        ),
-        (
-            ("GET", "/v1/principals"),
-            lambda service: service.list_principals("Bearer safe-key", "100", {}),
-            403,
-        ),
-        (
-            ("GET", "/v1/principals/{id}"),
-            lambda service: service.get_principal("target-human", "Bearer safe-key"),
-            403,
-        ),
-        (
-            ("PUT", "/v1/principals/{id}/status"),
-            lambda service: service.replace_principal_status(
-                "target-human",
-                {"status": "inactive", "expected_updated_at": "2026-09-07T00:00:00Z"},
-                "Bearer safe-key",
-            ),
-            403,
-        ),
         (
             ("POST", "/v1/principals/{id}/credentials"),
             lambda service: service.issue_credential(
@@ -212,14 +196,7 @@ def test_engine_denial_precedes_target_access_for_every_control_operation(
     """A denied control action cannot probe any target principal or credential."""
     import sre_agent.control.service as service_module
 
-    for repository in (
-        "PrincipalRepository",
-        "CredentialRepository",
-        "GrantRepository",
-        "IdempotencyRepository",
-        "ModelAliasRepository",
-        "CatalogRepository",
-    ):
+    for repository in REPOSITORIES:
         monkeypatch.setattr(service_module, repository, _TargetAccessed)
 
     service = ControlService.__new__(ControlService)
@@ -244,9 +221,6 @@ def test_engine_denial_precedes_target_access_for_every_control_operation(
     assert response.status_code == expected_status
     action, resource_type, resource_id = CONTROL_SCOPES[operation]
     if operation in {
-        ("POST", "/v1/principals"),
-        ("GET", "/v1/principals"),
-        ("GET", "/v1/principals/{id}"),
         ("POST", "/v1/grants"),
         ("GET", "/v1/grants"),
         ("POST", "/v1/model-aliases"),
@@ -263,3 +237,75 @@ def test_engine_denial_precedes_target_access_for_every_control_operation(
             _context().principal,
             (action, resource_type, resource_id),
         )
+
+
+# Operations served on the gate: the routes of their resource module, authenticated and
+# authorized by the gate (`active_principal`, `Gate.authorize`).
+@pytest.mark.parametrize(
+    ("routes_of", "operation", "invoke", "expected_status"),
+    [
+        (
+            PrincipalRoutes,
+            ("POST", "/v1/principals"),
+            lambda routes: routes.create_principal(
+                {"principal_id": "target-human", "kind": "human", "display_name": "Target"},
+                "Bearer safe-key",
+                "create-target-human",
+            ),
+            403,
+        ),
+        (
+            PrincipalRoutes,
+            ("GET", "/v1/principals"),
+            lambda routes: routes.list_principals("Bearer safe-key", "100", {}),
+            403,
+        ),
+        (
+            PrincipalRoutes,
+            ("GET", "/v1/principals/{id}"),
+            lambda routes: routes.get_principal("target-human", "Bearer safe-key"),
+            403,
+        ),
+        (
+            PrincipalRoutes,
+            ("PUT", "/v1/principals/{id}/status"),
+            lambda routes: routes.replace_principal_status(
+                "target-human",
+                {"status": "inactive", "expected_updated_at": "2026-09-07T00:00:00Z"},
+                "Bearer safe-key",
+            ),
+            403,
+        ),
+    ],
+)
+def test_engine_denial_precedes_target_access_for_every_gated_control_operation(
+    monkeypatch: pytest.MonkeyPatch,
+    routes_of: type,
+    operation: tuple[str, str],
+    invoke: object,
+    expected_status: int,
+) -> None:
+    """A denied control action cannot probe any target principal or credential."""
+    module = sys.modules[routes_of.__module__]
+    for repository in REPOSITORIES:
+        if hasattr(module, repository):
+            monkeypatch.setattr(module, repository, _TargetAccessed)
+    monkeypatch.setattr(
+        "sre_agent.gate.pipeline.active_principal", AsyncMock(return_value=_context())
+    )
+    denied = AuthorizationEvaluation(
+        decision=PolicyDecision(decision="deny", reason_code="no_matching_grant", policy_id=None),
+        denial_cause=AuthorizationDenialCause.GRANT_NOT_APPLICABLE,
+    )
+    authorize = AsyncMock(return_value=denied)
+    monkeypatch.setattr(Gate, "authorize", authorize)
+
+    @asynccontextmanager
+    async def sessions():
+        yield object()
+
+    routes = routes_of(sessions, _Audit(), AuditProjector(b"x" * 32))
+    response = asyncio.run(invoke(routes))
+
+    assert response.status_code == expected_status
+    authorize.assert_awaited_once_with(_context(), Scope(*CONTROL_SCOPES[operation]))

@@ -26,8 +26,8 @@ from sre_agent.control.service import (
     _public_principal,
     control_router,
 )
+from sre_agent.gate.pipeline import Gate
 from sre_agent.gateway.audit import AuditProjector
-from sre_agent.gateway.authentication import AuthenticationFailed
 from sre_agent.governance.authorization import AuthorizationDenialCause, AuthorizationEvaluation
 from sre_agent.governance.dto import PolicyDecision, Principal, PrincipalContext, Resource
 
@@ -273,7 +273,6 @@ def test_control_projector_rejects_llm_routing_evidence() -> None:
 def test_finish_maps_terminal_attempts_to_valid_control_audit() -> None:
     import asyncio
 
-    from sre_agent.control.service import ControlService
     from sre_agent.governance.dto import PolicyDecision
 
     projector = AuditProjector(b"x" * 32)
@@ -338,8 +337,6 @@ def test_finish_maps_terminal_attempts_to_valid_control_audit() -> None:
 
 
 def _stub_service(monkey_result=None, status=201, payload=None):
-    from sre_agent.control.service import ControlService
-
     service = ControlService.__new__(ControlService)
     service.revoke_grant = AsyncMock(return_value=Response(status_code=204))
     service.create_grant = AsyncMock(return_value=JSONResponse({}, 201))
@@ -435,8 +432,6 @@ def test_router_exposes_all_control_routes() -> None:
 
 
 def test_router_audits_invalid_inputs_with_contract_envelopes() -> None:
-    from sre_agent.control.service import ControlService
-
     appended: list = []
 
     class Audit:
@@ -479,8 +474,6 @@ def test_router_audits_invalid_inputs_with_contract_envelopes() -> None:
 
 
 def test_invalid_input_is_suppressed_when_audit_sink_rejects() -> None:
-    from sre_agent.control.service import ControlService
-
     class RejectingAudit:
         async def append(self, event):
             raise RuntimeError("sink rejected")
@@ -606,18 +599,22 @@ def test_principal_operations_use_shared_governed_authorization_before_effects(
         None,
     )
     audit = Audit()
-    service = ControlService(lambda: Session(), audit, AuditProjector(b"x" * 32))
+    service = PrincipalRoutes(lambda: Session(), audit, AuditProjector(b"x" * 32))
     effects = AsyncMock(return_value=None)
-    monkeypatch.setattr("sre_agent.control.service.PrincipalRepository.create", effects)
-    monkeypatch.setattr("sre_agent.control.service.PrincipalRepository.list", effects)
-    monkeypatch.setattr("sre_agent.control.service.PrincipalRepository.get", effects)
+    monkeypatch.setattr("sre_agent.control.principals.PrincipalRepository.create", effects)
+    monkeypatch.setattr("sre_agent.control.principals.PrincipalRepository.list", effects)
+    monkeypatch.setattr("sre_agent.control.principals.PrincipalRepository.get", effects)
     calls = []
 
-    async def denied(*args):
-        calls.append(args[2:])
-        return context, deny
+    async def authenticated(*_):
+        return context
 
-    monkeypatch.setattr("sre_agent.control.service.authorize_governed_access", denied)
+    async def denied(_gate, _context, scope):
+        calls.append((scope.action, scope.resource_type, scope.resource_id))
+        return deny
+
+    monkeypatch.setattr("sre_agent.gate.pipeline.active_principal", authenticated)
+    monkeypatch.setattr(Gate, "authorize", denied)
 
     async def exercise_denials():
         return (
@@ -640,17 +637,18 @@ def test_principal_operations_use_shared_governed_authorization_before_effects(
     ]
 
     async def invalid(*_):
-        raise AuthenticationFailed
+        return None
 
-    monkeypatch.setattr("sre_agent.control.service.authorize_governed_access", invalid)
+    monkeypatch.setattr("sre_agent.gate.pipeline.active_principal", invalid)
     invalid_responses = asyncio.run(exercise_denials())
     assert [response.status_code for response in invalid_responses] == [401, 401, 401]
     assert effects.await_count == 0
 
     async def allowed(*_):
-        return context, allow
+        return allow
 
-    monkeypatch.setattr("sre_agent.control.service.authorize_governed_access", allowed)
+    monkeypatch.setattr("sre_agent.gate.pipeline.active_principal", authenticated)
+    monkeypatch.setattr(Gate, "authorize", allowed)
     missing = asyncio.run(service.get_principal("missing-human", "Bearer sre_valid_key"))
     assert missing.status_code == 404
     assert effects.await_count == 1
