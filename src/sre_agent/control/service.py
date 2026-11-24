@@ -217,12 +217,6 @@ class CatalogListResponse(BaseModel):
     truncated: bool
 
 
-class ModelAliasListResponse(BaseModel):
-    items: list[ModelAlias]
-    limit: int
-    truncated: bool
-
-
 class ModelAliasAssignment(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
     concrete_model: Annotated[str, Field(pattern=r"^[A-Za-z0-9._-]+/[A-Za-z0-9._:-]+$")]
@@ -1870,73 +1864,6 @@ def control_router(service: ControlService) -> APIRouter:
             authorization_from(credentials, request),
             request.headers.get("idempotency-key"),
         )
-        response.status_code = result.status_code
-        return result
-
-    @router.get(
-        "/v1/model-aliases",
-        response_model=ModelAliasListResponse,
-        responses={
-            401: {"model": ErrorEnvelope},
-            403: {"model": ErrorEnvelope},
-            422: {"model": ErrorEnvelope},
-            503: {"model": ErrorEnvelope},
-        },
-        openapi_extra={
-            "parameters": [
-                {
-                    "name": "limit",
-                    "in": "query",
-                    "required": False,
-                    "schema": {"type": "integer", "default": 100, "minimum": 1, "maximum": 100},
-                },
-            ],
-            "x-forbidden-query-parameters": [
-                "cursor",
-                "page",
-                "offset",
-                "continuation_token",
-                "next",
-            ],
-            **CONTROL[("GET", "/v1/model-aliases")].openapi_extra,
-        },
-    )
-    async def list_aliases(
-        request: Request,
-        response: Response,
-        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
-    ) -> Response:
-        known = {"limit"}
-        result = await service.list_aliases(
-            authorization_from(credentials, request),
-            request.query_params.get("limit", "100"),
-            {key: value for key, value in request.query_params.items() if key not in known},
-        )
-        response.status_code = result.status_code
-        return result
-
-    @router.get(
-        "/v1/model-aliases/{alias_id}",
-        response_model=ModelAlias,
-        responses={
-            401: {"model": ErrorEnvelope},
-            403: {"model": ErrorEnvelope},
-            404: {"model": ErrorEnvelope},
-            422: {"model": ErrorEnvelope},
-            503: {"model": ErrorEnvelope},
-        },
-        openapi_extra=CONTROL[("GET", "/v1/model-aliases/{id}")].openapi_extra,
-    )
-    async def get_alias(
-        alias_id: Annotated[
-            str,
-            WithJsonSchema({"type": "string", "pattern": IDENTIFIER_PATTERN}),
-        ],
-        request: Request,
-        response: Response,
-        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
-    ) -> Response:
-        result = await service.get_alias(alias_id, authorization_from(credentials, request))
         response.status_code = result.status_code
         return result
 

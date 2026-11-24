@@ -17,6 +17,7 @@ from control_testkit import _deny, _service, _TargetAccessed
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+from sre_agent.control.aliases import AliasRoutes, aliases_router
 from sre_agent.control.operations import CONTROL_OPERATIONS, CONTROL_SCOPES
 from sre_agent.control.service import (
     ControlService,
@@ -341,18 +342,23 @@ def _stub_alias_service():
     service = ControlService.__new__(ControlService)
     created = JSONResponse({**ALIAS_BODY, "status": "active"}, 201)
     service.create_alias = AsyncMock(return_value=created)
-    service.list_aliases = AsyncMock(
-        return_value=JSONResponse({"items": [], "limit": 100, "truncated": False}, 200)
-    )
-    service.get_alias = AsyncMock(
-        return_value=JSONResponse({**ALIAS_BODY, "status": "active"}, 200)
-    )
     return service
 
 
-def test_router_exposes_alias_create_and_reads() -> None:
+def _stub_alias_app() -> FastAPI:
+    routes = AliasRoutes.__new__(AliasRoutes)
+    routes.list_aliases = AsyncMock(
+        return_value=JSONResponse({"items": [], "limit": 100, "truncated": False}, 200)
+    )
+    routes.get_alias = AsyncMock(return_value=JSONResponse({**ALIAS_BODY, "status": "active"}, 200))
     app = FastAPI()
+    app.include_router(aliases_router(routes))
     app.include_router(build_control_router(_stub_alias_service()))
+    return app
+
+
+def test_router_exposes_alias_create_and_reads() -> None:
+    app = _stub_alias_app()
     routes = {(r.path, tuple(sorted(r.methods))) for r in app.routes if r.path.startswith("/v1/")}
 
     assert ("/v1/model-aliases", ("GET", "POST")) in routes or (
@@ -378,8 +384,7 @@ def test_router_exposes_alias_create_and_reads() -> None:
 
 
 def test_alias_openapi_marks_idempotency_scope_and_closed_list() -> None:
-    app = FastAPI()
-    app.include_router(build_control_router(_stub_alias_service()))
+    app = _stub_alias_app()
     paths = app.openapi()["paths"]
 
     create = paths["/v1/model-aliases"]["post"]

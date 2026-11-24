@@ -16,6 +16,7 @@ from jsonschema import Draft202012Validator
 from pydantic import ValidationError
 
 from sre_agent.control import operations as scopes
+from sre_agent.control.aliases import AliasRoutes, aliases_router
 from sre_agent.control.credentials import CredentialRoutes, credentials_router
 from sre_agent.control.grants import GrantRoutes, grants_router
 from sre_agent.control.operations import CONTROL_OPERATIONS, CONTROL_SCOPES
@@ -341,10 +342,6 @@ def test_finish_maps_terminal_attempts_to_valid_control_audit() -> None:
 def _stub_service(monkey_result=None, status=201, payload=None):
     service = ControlService.__new__(ControlService)
     service.create_alias = AsyncMock(return_value=JSONResponse({}, 201))
-    service.list_aliases = AsyncMock(
-        return_value=JSONResponse({"items": [], "limit": 100, "truncated": False}, 200)
-    )
-    service.get_alias = AsyncMock(return_value=JSONResponse({}, 200))
     service.replace_alias_assignment = AsyncMock(return_value=JSONResponse({}, 200))
     service.replace_alias_status = AsyncMock(return_value=JSONResponse({}, 200))
     service.create_catalog_resource = AsyncMock(return_value=JSONResponse({}, 201))
@@ -379,6 +376,15 @@ def _stub_grants() -> GrantRoutes:
     return routes
 
 
+def _stub_aliases() -> AliasRoutes:
+    routes = AliasRoutes.__new__(AliasRoutes)
+    routes.list_aliases = AsyncMock(
+        return_value=JSONResponse({"items": [], "limit": 100, "truncated": False}, 200)
+    )
+    routes.get_alias = AsyncMock(return_value=JSONResponse({}, 200))
+    return routes
+
+
 def _control_app(service, principals, credentials=None, grants=None) -> FastAPI:
     """Every control router, as the application mounts them."""
     app = FastAPI()
@@ -387,6 +393,7 @@ def _control_app(service, principals, credentials=None, grants=None) -> FastAPI:
         credentials_router(credentials or CredentialRoutes.__new__(CredentialRoutes))
     )
     app.include_router(grants_router(grants or _stub_grants()))
+    app.include_router(aliases_router(_stub_aliases()))
     app.include_router(control_router(service))
     return app
 
