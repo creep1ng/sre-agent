@@ -16,9 +16,8 @@ from jsonschema import Draft202012Validator
 from pydantic import ValidationError
 
 from sre_agent.control import operations as scopes
-from sre_agent.control.operations import CONTROL_SCOPES
+from sre_agent.control.operations import CONTROL_OPERATIONS, CONTROL_SCOPES
 from sre_agent.control.service import (
-    CONTROL_OPERATIONS,
     ControlService,
     SkillPublishRequest,
     _key_digest,

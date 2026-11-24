@@ -13,7 +13,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import select
 
-from sre_agent.control.operations import CONTROL_SCOPES
+from sre_agent.control.operations import CONTROL, CONTROL_SCOPES
 from sre_agent.control.service import ControlService, _key_digest, _payload_sha256
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
 from sre_agent.persistence.models import ConsumptionLimitPolicyRow
@@ -218,13 +218,7 @@ def consumption_limits_router(service: ConsumptionLimitPolicyService) -> APIRout
             403: {"description": "Resource unavailable"},
             503: {"description": "Policy unavailable"},
         },
-        openapi_extra={
-            "x-governed-scope": {
-                "action": "admin.read",
-                "resource_type": "administrative_control",
-                "resource_id": "consumption_limits",
-            }
-        },
+        openapi_extra=CONTROL[("GET", "/v1/consumption-limits")].openapi_extra,
     )
     async def get_consumption_limits(
         credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
@@ -243,13 +237,7 @@ def consumption_limits_router(service: ConsumptionLimitPolicyService) -> APIRout
             422: {"description": "Invalid policy"},
             503: {"description": "Policy unavailable"},
         },
-        openapi_extra={
-            "x-governed-scope": {
-                "action": "admin.write",
-                "resource_type": "administrative_control",
-                "resource_id": "consumption_limits",
-            }
-        },
+        openapi_extra=CONTROL[("PUT", "/v1/consumption-limits")].openapi_extra,
     )
     async def put_consumption_limits(
         raw: Annotated[Any, Body()],

@@ -1,10 +1,11 @@
 """The one registry of control-plane operations.
 
-Each operation names its audit operation, its route and the scope it asks for; the scope table
-derives from it.
+Each operation names its audit operation, its route and the scope it asks for. The scope table,
+the audit names and the `x-governed-scope` OpenAPI extras derive from it.
 """
 
 from dataclasses import dataclass
+from typing import Any
 
 RESOURCE_TYPE = "administrative_control"
 
@@ -25,6 +26,19 @@ class ControlOperation:
     @property
     def key(self) -> tuple[str, str]:
         return self.method, self.path
+
+    @property
+    def openapi_extra(self) -> dict[str, Any]:
+        """The route's `x-governed-scope`, or nothing for a route that does not document it."""
+        if not self.documented:
+            return {}
+        return {
+            "x-governed-scope": {
+                "action": self.action,
+                "resource_type": RESOURCE_TYPE,
+                "resource_id": self.resource_id,
+            }
+        }
 
 
 def _operation(
@@ -92,4 +106,7 @@ CONTROL: dict[tuple[str, str], ControlOperation] = {op.key: op for op in OPERATI
 assert len(CONTROL) == len(OPERATIONS), "a control route is registered twice"
 CONTROL_SCOPES: dict[tuple[str, str], tuple[str, str, str]] = {
     key: (op.action, RESOURCE_TYPE, op.resource_id) for key, op in CONTROL.items()
+}
+CONTROL_OPERATIONS: dict[tuple[str, str], tuple[str, str, str, str]] = {
+    key: (op.name, *CONTROL_SCOPES[key]) for key, op in CONTROL.items()
 }

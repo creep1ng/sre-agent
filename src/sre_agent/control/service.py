@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from sre_agent.bok.owner import BoKVersionCollision
 from sre_agent.bok.publication import BOK_SLUG_PATTERN, SEMVER_PATTERN, BoKAuthorRefused, BoKPublishRequest, BoKVersionRecord, BoKVersionSummary, publish_bok_version, read_bok_version  # fmt: skip
-from sre_agent.control.operations import CONTROL_SCOPES
+from sre_agent.control.operations import CONTROL, CONTROL_SCOPES
 from sre_agent.gate.authentication import bearer_key
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
@@ -61,172 +61,6 @@ ERROR_MESSAGES = {
     "credential_inactive": "The credential is not active.",
     "credential_issuance_failed": "Credential issuance could not be completed.",
 }
-CONTROL_OPERATIONS: dict[tuple[str, str], tuple[str, str, str, str]] = {
-    ("PUT", "/v1/consumption-limits"): (
-        "consumption_limits.replace",
-        "admin.write",
-        "administrative_control",
-        "consumption_limits",
-    ),
-    ("GET", "/v1/consumption-limits"): (
-        "consumption_limits.get",
-        "admin.read",
-        "administrative_control",
-        "consumption_limits",
-    ),
-    ("POST", "/v1/principals"): (
-        "principals.create",
-        "admin.write",
-        "administrative_control",
-        "principals",
-    ),
-    ("GET", "/v1/principals"): (
-        "principals.list",
-        "admin.read",
-        "administrative_control",
-        "principals",
-    ),
-    ("GET", "/v1/principals/{id}"): (
-        "principals.get",
-        "admin.read",
-        "administrative_control",
-        "principals",
-    ),
-    ("PUT", "/v1/principals/{id}/status"): (
-        "principals.status.replace",
-        "admin.write",
-        "administrative_control",
-        "principals",
-    ),
-    ("POST", "/v1/principals/{id}/credentials"): (
-        "credentials.issue",
-        "admin.write",
-        "administrative_control",
-        "credentials",
-    ),
-    ("GET", "/v1/principals/{id}/credentials"): (
-        "credentials.list",
-        "admin.read",
-        "administrative_control",
-        "credentials",
-    ),
-    ("DELETE", "/v1/credentials/{id}"): (
-        "credentials.revoke",
-        "admin.write",
-        "administrative_control",
-        "credentials",
-    ),
-    ("POST", "/v1/credentials/{id}/rotation"): (
-        "credentials.rotate",
-        "admin.write",
-        "administrative_control",
-        "credentials",
-    ),
-    ("POST", "/v1/grants"): (
-        "grants.create",
-        "admin.write",
-        "administrative_control",
-        "grants",
-    ),
-    ("GET", "/v1/grants"): (
-        "grants.list",
-        "admin.read",
-        "administrative_control",
-        "grants",
-    ),
-    ("DELETE", "/v1/grants/{id}"): (
-        "grants.revoke",
-        "admin.write",
-        "administrative_control",
-        "grants",
-    ),
-    ("POST", "/v1/model-aliases"): (
-        "aliases.create",
-        "admin.write",
-        "administrative_control",
-        "model_aliases",
-    ),
-    ("GET", "/v1/model-aliases"): (
-        "aliases.list",
-        "admin.read",
-        "administrative_control",
-        "model_aliases",
-    ),
-    ("GET", "/v1/model-aliases/{id}"): (
-        "aliases.get",
-        "admin.read",
-        "administrative_control",
-        "model_aliases",
-    ),
-    ("PUT", "/v1/model-aliases/{id}/assignment"): (
-        "aliases.assignment.replace",
-        "admin.write",
-        "administrative_control",
-        "model_aliases",
-    ),
-    ("PUT", "/v1/model-aliases/{id}/status"): (
-        "aliases.status.replace",
-        "admin.write",
-        "administrative_control",
-        "model_aliases",
-    ),
-    ("POST", "/v1/catalog/resources"): (
-        "catalog.create",
-        "admin.write",
-        "administrative_control",
-        "catalog",
-    ),
-    ("GET", "/v1/catalog/resources"): (
-        "catalog.list",
-        "admin.read",
-        "administrative_control",
-        "catalog",
-    ),
-    ("GET", "/v1/catalog/resources/{type}/{id}"): (
-        "catalog.read",
-        "admin.read",
-        "administrative_control",
-        "catalog",
-    ),
-    ("POST", "/v1/skills/versions"): (
-        "catalog.create",
-        "admin.write",
-        "administrative_control",
-        "catalog",
-    ),
-    ("GET", "/v1/skills/{skill_id}/{version}"): (
-        "catalog.read",
-        "admin.read",
-        "administrative_control",
-        "catalog",
-    ),
-    ("PUT", "/v1/skills/{skill_id}/{version}/status"): (
-        "catalog.status.replace",
-        "admin.write",
-        "administrative_control",
-        "catalog",
-    ),
-    ("GET", "/v1/skills/{skill_id}/{version}/status"): (
-        "catalog.read",
-        "admin.write",
-        "administrative_control",
-        "catalog",
-    ),
-    ("POST", "/v1/bok/collections/versions"): (
-        "catalog.create",
-        "admin.write",
-        "administrative_control",
-        "catalog",
-    ),
-    ("GET", "/v1/bok/collections/{collection_id}/versions/{version}"): (
-        "catalog.read",
-        "admin.read",
-        "administrative_control",
-        "catalog",
-    ),
-}
-assert set(CONTROL_OPERATIONS) == set(CONTROL_SCOPES)
-assert all(CONTROL_OPERATIONS[route][1:] == scope for route, scope in CONTROL_SCOPES.items())
 
 
 class PrincipalCreate(BaseModel):
@@ -3414,11 +3248,7 @@ def control_router(service: ControlService) -> APIRouter:
                 "required": True,
                 "content": {"application/json": {"schema": PrincipalCreate.model_json_schema()}},
             },
-            "x-governed-scope": {
-                "action": "admin.write",
-                "resource_type": "administrative_control",
-                "resource_id": "principals",
-            },
+            **CONTROL[("POST", "/v1/principals")].openapi_extra,
         },
     )
     async def create_principal(
@@ -3457,11 +3287,7 @@ def control_router(service: ControlService) -> APIRouter:
                     "schema": {"type": "integer", "default": 100, "minimum": 1, "maximum": 100},
                 }
             ],
-            "x-governed-scope": {
-                "action": "admin.read",
-                "resource_type": "administrative_control",
-                "resource_id": "principals",
-            },
+            **CONTROL[("GET", "/v1/principals")].openapi_extra,
         },
     )
     async def list_principals(
@@ -3488,13 +3314,7 @@ def control_router(service: ControlService) -> APIRouter:
             422: {"model": ErrorEnvelope, "description": "Validation error"},
             503: {"model": ErrorEnvelope, "description": "Audit unavailable"},
         },
-        openapi_extra={
-            "x-governed-scope": {
-                "action": "admin.read",
-                "resource_type": "administrative_control",
-                "resource_id": "principals",
-            }
-        },
+        openapi_extra=CONTROL[("GET", "/v1/principals/{id}")].openapi_extra,
     )
     async def get_principal(
         principal_id: Annotated[
@@ -3717,11 +3537,7 @@ def control_router(service: ControlService) -> APIRouter:
                 "required": True,
                 "content": {"application/json": {"schema": GrantCreate.model_json_schema()}},
             },
-            "x-governed-scope": {
-                "action": "admin.write",
-                "resource_type": "administrative_control",
-                "resource_id": "grants",
-            },
+            **CONTROL[("POST", "/v1/grants")].openapi_extra,
         },
     )
     async def create_grant(
@@ -3775,11 +3591,7 @@ def control_router(service: ControlService) -> APIRouter:
                 "continuation_token",
                 "next",
             ],
-            "x-governed-scope": {
-                "action": "admin.read",
-                "resource_type": "administrative_control",
-                "resource_id": "grants",
-            },
+            **CONTROL[("GET", "/v1/grants")].openapi_extra,
         },
     )
     async def list_grants(
@@ -3849,11 +3661,7 @@ def control_router(service: ControlService) -> APIRouter:
                 "required": True,
                 "content": {"application/json": {"schema": ModelAliasCreate.model_json_schema()}},
             },
-            "x-governed-scope": {
-                "action": "admin.write",
-                "resource_type": "administrative_control",
-                "resource_id": "model_aliases",
-            },
+            **CONTROL[("POST", "/v1/model-aliases")].openapi_extra,
         },
     )
     async def create_alias(
@@ -3894,11 +3702,7 @@ def control_router(service: ControlService) -> APIRouter:
                 "continuation_token",
                 "next",
             ],
-            "x-governed-scope": {
-                "action": "admin.read",
-                "resource_type": "administrative_control",
-                "resource_id": "model_aliases",
-            },
+            **CONTROL[("GET", "/v1/model-aliases")].openapi_extra,
         },
     )
     async def list_aliases(
@@ -3925,13 +3729,7 @@ def control_router(service: ControlService) -> APIRouter:
             422: {"model": ErrorEnvelope},
             503: {"model": ErrorEnvelope},
         },
-        openapi_extra={
-            "x-governed-scope": {
-                "action": "admin.read",
-                "resource_type": "administrative_control",
-                "resource_id": "model_aliases",
-            }
-        },
+        openapi_extra=CONTROL[("GET", "/v1/model-aliases/{id}")].openapi_extra,
     )
     async def get_alias(
         alias_id: Annotated[
@@ -3964,11 +3762,7 @@ def control_router(service: ControlService) -> APIRouter:
                     "application/json": {"schema": ModelAliasAssignment.model_json_schema()}
                 },
             },
-            "x-governed-scope": {
-                "action": "admin.write",
-                "resource_type": "administrative_control",
-                "resource_id": "model_aliases",
-            },
+            **CONTROL[("PUT", "/v1/model-aliases/{id}/assignment")].openapi_extra,
         },
     )
     async def replace_alias_assignment(
@@ -4004,11 +3798,7 @@ def control_router(service: ControlService) -> APIRouter:
                     "application/json": {"schema": ActiveInactiveStatus.model_json_schema()}
                 },
             },
-            "x-governed-scope": {
-                "action": "admin.write",
-                "resource_type": "administrative_control",
-                "resource_id": "model_aliases",
-            },
+            **CONTROL[("PUT", "/v1/model-aliases/{id}/status")].openapi_extra,
         },
     )
     async def replace_alias_status(
@@ -4056,11 +3846,7 @@ def control_router(service: ControlService) -> APIRouter:
                 "required": True,
                 "content": {"application/json": {"schema": CatalogCreate.model_json_schema()}},
             },
-            "x-governed-scope": {
-                "action": "admin.write",
-                "resource_type": "administrative_control",
-                "resource_id": "catalog",
-            },
+            **CONTROL[("POST", "/v1/catalog/resources")].openapi_extra,
         },
     )
     async def create_catalog_resource(
@@ -4137,11 +3923,7 @@ def control_router(service: ControlService) -> APIRouter:
                 "continuation_token",
                 "next",
             ],
-            "x-governed-scope": {
-                "action": "admin.read",
-                "resource_type": "administrative_control",
-                "resource_id": "catalog",
-            },
+            **CONTROL[("GET", "/v1/catalog/resources")].openapi_extra,
         },
     )
     async def list_catalog_resources(
@@ -4172,13 +3954,7 @@ def control_router(service: ControlService) -> APIRouter:
             422: {"model": ErrorEnvelope},
             503: {"model": ErrorEnvelope},
         },
-        openapi_extra={
-            "x-governed-scope": {
-                "action": "admin.read",
-                "resource_type": "administrative_control",
-                "resource_id": "catalog",
-            }
-        },
+        openapi_extra=CONTROL[("GET", "/v1/catalog/resources/{type}/{id}")].openapi_extra,
     )
     async def get_catalog_resource(
         resource_type: Annotated[
@@ -4240,11 +4016,7 @@ def control_router(service: ControlService) -> APIRouter:
                     "application/json": {"schema": SkillPublishRequest.model_json_schema()}
                 },
             },
-            "x-governed-scope": {
-                "action": "admin.write",
-                "resource_type": "administrative_control",
-                "resource_id": "catalog",
-            },
+            **CONTROL[("POST", "/v1/skills/versions")].openapi_extra,
         },
     )
     async def publish_skill_version(
@@ -4270,13 +4042,7 @@ def control_router(service: ControlService) -> APIRouter:
             422: {"model": ErrorEnvelope},
             503: {"model": ErrorEnvelope},
         },
-        openapi_extra={
-            "x-governed-scope": {
-                "action": "admin.read",
-                "resource_type": "administrative_control",
-                "resource_id": "catalog",
-            }
-        },
+        openapi_extra=CONTROL[("GET", "/v1/skills/{skill_id}/{version}")].openapi_extra,
     )
     async def get_skill_version(
         skill_id: Annotated[
@@ -4313,13 +4079,7 @@ def control_router(service: ControlService) -> APIRouter:
             422: {"model": ErrorEnvelope},
             503: {"model": ErrorEnvelope},
         },
-        openapi_extra={
-            "x-governed-scope": {
-                "action": "admin.write",
-                "resource_type": "administrative_control",
-                "resource_id": "catalog",
-            }
-        },
+        openapi_extra=CONTROL[("GET", "/v1/skills/{skill_id}/{version}/status")].openapi_extra,
     )
     async def get_skill_status(
         skill_id: Annotated[
@@ -4364,11 +4124,7 @@ def control_router(service: ControlService) -> APIRouter:
                     "application/json": {"schema": ActiveInactiveStatus.model_json_schema()}
                 },
             },
-            "x-governed-scope": {
-                "action": "admin.write",
-                "resource_type": "administrative_control",
-                "resource_id": "catalog",
-            },
+            **CONTROL[("PUT", "/v1/skills/{skill_id}/{version}/status")].openapi_extra,
         },
     )
     async def replace_skill_status(
@@ -4430,11 +4186,7 @@ def control_router(service: ControlService) -> APIRouter:
                 "required": True,
                 "content": {"application/json": {"schema": BoKPublishRequest.model_json_schema()}},
             },
-            "x-governed-scope": {
-                "action": "admin.write",
-                "resource_type": "administrative_control",
-                "resource_id": "catalog",
-            },
+            **CONTROL[("POST", "/v1/bok/collections/versions")].openapi_extra,
         },
     )
     async def publish_bok_version(
@@ -4460,13 +4212,9 @@ def control_router(service: ControlService) -> APIRouter:
             422: {"model": ErrorEnvelope},
             503: {"model": ErrorEnvelope},
         },
-        openapi_extra={
-            "x-governed-scope": {
-                "action": "admin.read",
-                "resource_type": "administrative_control",
-                "resource_id": "catalog",
-            }
-        },
+        openapi_extra=CONTROL[
+            ("GET", "/v1/bok/collections/{collection_id}/versions/{version}")
+        ].openapi_extra,
     )
     async def get_bok_version(
         collection_id: Annotated[
