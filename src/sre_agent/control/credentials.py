@@ -1,11 +1,11 @@
 """Credentials: the API keys a principal authenticates with, issued, listed, revoked and rotated."""
 
 from dataclasses import replace
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials
-from pydantic import ValidationError
+from pydantic import AwareDatetime, BaseModel, ConfigDict, ValidationError
 
 from sre_agent.control.governed import (
     IDEMPOTENCY_CONFLICT,
@@ -14,6 +14,7 @@ from sre_agent.control.governed import (
     REFUSALS,
     ControlAudit,
     ControlGate,
+    audited_as,
     canonical_payload,
     idempotency_key,
     key_digest,
@@ -29,20 +30,12 @@ from sre_agent.control.routing import (
     raw_json,
     unknown_query,
 )
-
-# The response models stay with the rotation route in service.py until it moves too: one class
-# each, so openapi.json keeps one schema per name.
-from sre_agent.control.service import (
-    CredentialIssue,
-    CredentialIssueResponse,
-    CredentialListResponse,
-    CredentialMetadataResponse,
-)
+from sre_agent.control.service import ErrorEnvelope
 from sre_agent.gate.errors import GovernedError
 from sre_agent.gate.pipeline import Admission, Released, failing_as
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.responses import TransactionalAuditStore
-from sre_agent.governance.dto import PrincipalContext
+from sre_agent.governance.dto import CredentialReference, PrincipalContext
 from sre_agent.persistence.repositories import (
     CredentialRepository,
     IdempotencyConflictError,
@@ -55,6 +48,7 @@ from sre_agent.vocabulary import is_identifier
 ISSUE = CONTROL[("POST", "/v1/principals/{id}/credentials")]
 LIST = CONTROL[("GET", "/v1/principals/{id}/credentials")]
 REVOKE = CONTROL[("DELETE", "/v1/credentials/{id}")]
+ROTATE = CONTROL[("POST", "/v1/credentials/{id}/rotation")]
 ISSUANCE_FAILED = GovernedError(
     500, "credential_issuance_failed", "Credential issuance could not be completed.", retryable=True
 )
@@ -62,8 +56,73 @@ ISSUANCE_FAILED = GovernedError(
 HIDDEN = replace(REFUSALS, denied=NOT_FOUND)
 
 
+class CredentialIssue(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+    expires_at: AwareDatetime | None = None
+
+
+class CredentialIssueResponse(BaseModel):
+    credential: CredentialReference
+    replaced_credential_id: str | None
+    key: str
+    secret_revealed: Literal[True]
+
+
+class CredentialMetadataResponse(BaseModel):
+    credential: CredentialReference
+    replaced_credential_id: str | None
+    secret_revealed: Literal[False]
+
+
+class CredentialRotationResponse(BaseModel):
+    result: Literal["success"]
+    old_credential: CredentialReference
+    issuance: CredentialIssueResponse | CredentialMetadataResponse
+    replacement_count: Literal[1]
+    transition_count: Literal[1]
+    replayed: bool
+
+
+class RotationIssuanceFailure(RuntimeError):
+    """A replacement key could not be issued after the old credential was locked."""
+
+
+class CredentialRotationFailureResponse(BaseModel):
+    result: Literal["failure"]
+    old_credential: CredentialReference
+    replacement_count: Literal[0]
+    transition_count: Literal[0]
+    replayed: Literal[False]
+    error_code: Literal["credential_inactive", "rotation_failed"]
+
+
+class CredentialListResponse(BaseModel):
+    items: list[CredentialReference]
+    limit: int
+    truncated: bool
+
+
+class RotationRefused(GovernedError):
+    """A rotation that changed nothing: the old credential is inactive or no key was issued.
+    The route answers it with the failure body, not the error envelope."""
+
+    def __init__(self, old: CredentialReference, code: str) -> None:
+        super().__init__(409, code)
+        self.old = old
+
+    def body(self) -> dict[str, Any]:
+        return {
+            "result": "failure",
+            "old_credential": self.old.model_dump(mode="json"),
+            "replacement_count": 0,
+            "transition_count": 0,
+            "replayed": False,
+            "error_code": self.code,
+        }
+
+
 class Credentials:
-    """Issue, list and revoke the credentials of principals."""
+    """Issue, list, revoke and rotate the credentials of principals."""
 
     def __init__(self, sessions: Any) -> None:
         self.sessions = sessions
@@ -137,6 +196,44 @@ class Credentials:
                 raise NOT_FOUND
             await repository.revoke(credential_id)
 
+    async def rotate(
+        self, caller: PrincipalContext, credential_id: str, body: CredentialIssue, key: str
+    ) -> dict[str, Any]:
+        """Replace an active credential by a new key; `RotationRefused` when nothing changed."""
+        path = f"/v1/credentials/{credential_id}/rotation"
+        try:
+            async with self.sessions() as session, session.begin():
+                repository = CredentialRepository(session)
+                old = await repository.get(credential_id)
+                if old is None:
+                    raise NOT_FOUND
+                binding = await self._claim(session, caller, path, key, body, credential_id)
+                if binding.replayed:
+                    return {**binding.outcome.response_payload, "replayed": True}
+                if old.status != "active":
+                    raise RotationRefused(old, "credential_inactive")
+                with failing_as(RotationRefused(old, "rotation_failed")):
+                    issued = await repository.rotate(credential_id, expires_at=body.expires_at)
+                if issued is None:
+                    raise RotationRefused(old, "credential_inactive")
+                metadata = {
+                    "result": "success",
+                    "old_credential": old.model_dump(mode="json"),
+                    "issuance": {
+                        "credential": issued.credential.model_dump(mode="json"),
+                        "replaced_credential_id": old.credential_id,
+                        "secret_revealed": False,
+                    },
+                    "replacement_count": 1,
+                    "transition_count": 1,
+                    "replayed": False,
+                }
+                await self._remember(session, caller, path, key, metadata)
+        except IdempotencyConflictError:
+            raise IDEMPOTENCY_CONFLICT from None
+        issuance = {**metadata["issuance"], "key": issued.key, "secret_revealed": True}
+        return {**metadata, "issuance": issuance}
+
 
 class CredentialRoutes:
     """The credential routes on the gate: validate, then run the use case once authorized."""
@@ -151,6 +248,9 @@ class CredentialRoutes:
         )
         self.listing: ControlGate[int] = ControlGate(sessions, control, LIST, refusals=HIDDEN)
         self.revoking: ControlGate[str] = ControlGate(sessions, control, REVOKE)
+        self.rotating: ControlGate[tuple[str, CredentialIssue, str]] = ControlGate(
+            sessions, control, ROTATE
+        )
 
     @staticmethod
     def _keyed(target: str, raw: Any, key: str | None) -> tuple[str, CredentialIssue, str]:
@@ -199,6 +299,22 @@ class CredentialRoutes:
 
         return await self.revoking.run(authorization, revoke, validate)
 
+    async def rotate_credential(
+        self, credential_id: str, raw: Any, authorization: str | None, key: str | None
+    ) -> Response:
+        async def rotate(
+            admission: Admission, request: tuple[str, CredentialIssue, str]
+        ) -> Released:
+            try:
+                return Released(await self.credentials.rotate(admission.context, *request), 201)
+            except RotationRefused as refused:
+                audited_as(admission, refused.code)
+                return Released(refused.body(), 409)
+
+        return await self.rotating.run(
+            authorization, rotate, lambda: self._keyed(credential_id, raw, key)
+        )
+
 
 def credentials_router(routes: CredentialRoutes) -> APIRouter:
     router = APIRouter()
@@ -246,6 +362,29 @@ def credentials_router(routes: CredentialRoutes) -> APIRouter:
     ) -> Response:
         return await routes.revoke_credential(
             credential_id, authorization_from(credentials, request)
+        )
+
+    @router.post(
+        ROTATE.route,
+        status_code=201,
+        response_model=CredentialRotationResponse | CredentialRotationFailureResponse,
+        responses={
+            **errors(400, 401, 403, 404),
+            409: {"model": CredentialRotationFailureResponse | ErrorEnvelope},
+            **errors(422, 503),
+        },
+        openapi_extra={"parameters": [idempotency_key_parameter()]},
+    )
+    async def rotate_credential(
+        credential_id: str,
+        request: Request,
+        credentials: HTTPAuthorizationCredentials | None = credentials_of,
+    ) -> Response:
+        return await routes.rotate_credential(
+            credential_id,
+            await raw_json(request),
+            authorization_from(credentials, request),
+            request.headers.get("idempotency-key"),
         )
 
     return router

@@ -112,45 +112,8 @@ class CredentialIssue(BaseModel):
     expires_at: AwareDatetime | None = None
 
 
-class CredentialIssueResponse(BaseModel):
-    credential: CredentialReference
-    replaced_credential_id: str | None
-    key: str
-    secret_revealed: Literal[True]
-
-
-class CredentialMetadataResponse(BaseModel):
-    credential: CredentialReference
-    replaced_credential_id: str | None
-    secret_revealed: Literal[False]
-
-
-class CredentialRotationResponse(BaseModel):
-    result: Literal["success"]
-    old_credential: CredentialReference
-    issuance: CredentialIssueResponse | CredentialMetadataResponse
-    replacement_count: Literal[1]
-    transition_count: Literal[1]
-    replayed: bool
-
-
 class RotationIssuanceFailure(RuntimeError):
     """A replacement key could not be issued after the old credential was locked."""
-
-
-class CredentialRotationFailureResponse(BaseModel):
-    result: Literal["failure"]
-    old_credential: CredentialReference
-    replacement_count: Literal[0]
-    transition_count: Literal[0]
-    replayed: Literal[False]
-    error_code: Literal["credential_inactive", "rotation_failed"]
-
-
-class CredentialListResponse(BaseModel):
-    items: list[CredentialReference]
-    limit: int
-    truncated: bool
 
 
 class GrantCreate(BaseModel):
@@ -2830,50 +2793,6 @@ def control_router(service: ControlService) -> APIRouter:
         if credentials is not None:
             return f"{credentials.scheme} {credentials.credentials}"
         return request.headers.get("authorization")
-
-    @router.post(
-        "/v1/credentials/{credential_id}/rotation",
-        status_code=201,
-        response_model=CredentialRotationResponse | CredentialRotationFailureResponse,
-        responses={
-            400: {"model": ErrorEnvelope},
-            401: {"model": ErrorEnvelope},
-            403: {"model": ErrorEnvelope},
-            404: {"model": ErrorEnvelope},
-            409: {"model": CredentialRotationFailureResponse | ErrorEnvelope},
-            422: {"model": ErrorEnvelope},
-            503: {"model": ErrorEnvelope},
-        },
-        openapi_extra={
-            "parameters": [
-                {
-                    "name": "Idempotency-Key",
-                    "in": "header",
-                    "required": True,
-                    "schema": {
-                        "type": "string",
-                        "minLength": 16,
-                        "maxLength": 128,
-                        "pattern": IDEMPOTENCY_KEY_PATTERN,
-                    },
-                }
-            ]
-        },
-    )
-    async def rotate_credential(
-        credential_id: str,
-        request: Request,
-        response: Response,
-        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
-    ) -> Response:
-        result = await service.rotate_credential(
-            credential_id,
-            await raw_json(request),
-            authorization_from(credentials, request),
-            request.headers.get("idempotency-key"),
-        )
-        response.status_code = result.status_code
-        return result
 
     @router.post(
         "/v1/grants",

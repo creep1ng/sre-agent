@@ -74,7 +74,7 @@ REASONS = {
     "policy_unavailable": "upstream_unavailable",
 }
 # Facts a route's use case leaves for the auditor (`Admission.facts`).
-_STARTED, _SETTLED = "control.started", "control.settled"
+_STARTED, _SETTLED, _REASON = "control.started", "control.settled", "control.reason"
 
 
 def canonical_payload(payload: Any) -> str:
@@ -107,6 +107,11 @@ def idempotency_key(value: str | None) -> str:
     if value is None or re.match(IDEMPOTENCY_KEY_PATTERN, value) is None:
         raise INVALID_IDEMPOTENCY_KEY
     return value
+
+
+def audited_as(admission: Admission, reason: str) -> None:
+    """The audit reason of a refusal the route answers with its own body (a rotation failure)."""
+    admission.facts[_REASON] = reason
 
 
 class ControlAudit:
@@ -225,7 +230,8 @@ class ControlGate(Generic[T]):
     async def _audit(self, terminal: Terminal) -> None:
         if terminal.facts.get(_SETTLED) == terminal.status:
             return
-        reason = terminal.error.code if terminal.error is not None else self.reason
+        error = terminal.error
+        reason = error.code if error is not None else terminal.facts.get(_REASON, self.reason)
         await self.audit.store.append(
             self.audit.event(
                 self.operation,
