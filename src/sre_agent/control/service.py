@@ -32,16 +32,14 @@ from sre_agent.gateway.authentication import AuthenticationFailed, authorize_gov
 from sre_agent.gateway.responses import TransactionalAuditStore
 from sre_agent.governance.authorization import AuthorizationDecisionEngine
 from sre_agent.governance.dto import (
-    Grant,
     ModelAlias,
     Principal,
     PrincipalContext,
-    Resource,
     ResourceCatalogEntry,
     SkillManifest,
     SkillVersionRecord,
 )
-from sre_agent.persistence.repositories import CatalogRepository, CredentialRepository, GrantConflictError, GrantRepository, IdempotencyConflictError, IdempotencyOutcome, IdempotencyRepository, ModelAliasRepository, PrincipalRepository, ResourceRepository, SkillVersionConflictError, SkillVersionRepository, StaleWriteError  # fmt: skip
+from sre_agent.persistence.repositories import CatalogRepository, CredentialRepository, GrantRepository, IdempotencyConflictError, IdempotencyOutcome, IdempotencyRepository, ModelAliasRepository, ResourceRepository, SkillVersionConflictError, SkillVersionRepository, StaleWriteError  # fmt: skip
 from sre_agent.vocabulary import IDENTIFIER_PATTERN, Identifier, is_identifier
 
 ERRORS: dict[int, tuple[str, str]] = {
@@ -104,68 +102,6 @@ class ErrorEnvelope(BaseModel):
     error: ErrorDetail
     request_id: UUID
     retryable: bool
-
-
-class GrantCreate(BaseModel):
-    model_config = ConfigDict(strict=True, extra="forbid")
-    grant_id: Identifier
-    principal_id: Identifier
-    action: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_.:-]{1,63}$")]
-    resource: Resource
-    effect: Literal["allow"]
-
-
-# Admitted grant actions per resource contract (#423 CA3). Exact membership in
-# the per-type sets below: the resource-catalog owner/state/action matrix
-# (schemas/releases/*/conformance/resource-catalog-matrix.yaml) plus the
-# vocabularies the runtime actually evaluates: bare "invoke" on skill
-# (gateway/skills.py) alongside skill.invoke, admin.read/admin.write over
-# administrative_control (CONTROL_SCOPES), and the run.*, alert.*,
-# incident.declare and change.* (#770) actions over incident_workflow
-# (agent/api/authorization.v1.yaml and agent/api/triage.openapi.yaml). Dotted refinements such as "invoke.delete"
-# or "run.start.unpublished" are absent from those closed contracts and the
-# engine matches grant.action exactly, so they are rejected without mutation.
-# This is a pure lookup: it never touches a repository, so a denied caller
-# still receives 403 before any target access.
-# mitigation.execute over service_operation comes from the `governance` block of
-# schemas/executor/1.0.0/deploy-executor.yaml (#722).
-GRANT_ADMITTED_ACTIONS: dict[str, frozenset[str]] = {
-    "llm_model": frozenset({"admin.read", "admin.write", "invoke"}),
-    "mcp_server": frozenset({"admin.write", "mcp.discovery", "mcp.invoke"}),
-    "mcp_tool": frozenset({"admin.write", "mcp.discovery", "mcp.invoke"}),
-    "skill": frozenset({"admin.write", "skill.discovery", "skill.read", "skill.invoke", "invoke"}),
-    "bok_collection": frozenset({"admin.write", "bok.discovery", "bok.search", "bok.read"}),
-    "incident_workflow": frozenset(
-        {
-            "run.start",
-            "run.read",
-            "run.command",
-            "run.approve",
-            "run.read_context",
-            "alert.read",
-            "alert.triage",
-            "alert.dismiss",
-            "alert.associate",
-            "incident.declare",
-            "change.read",
-            "change.write",
-        }
-    ),
-    "administrative_control": frozenset({"admin.read", "admin.write"}),
-    "service_operation": frozenset({"mitigation.execute"}),
-}
-
-
-def _grant_action_admitted(resource_type: str, action: str) -> bool:
-    return action in GRANT_ADMITTED_ACTIONS.get(resource_type, frozenset())
-
-
-def _grant_conflict_code(error: Exception) -> str:
-    """Name what a new grant repeats, not a generic idempotency conflict (#759)."""
-    repeats = getattr(error, "repeats", None)
-    return {"grant_id": "grant_id_conflict", "active_grant": "grant_conflict"}.get(
-        repeats or "", "idempotency_conflict"
-    )
 
 
 class ModelAliasCreate(BaseModel):
@@ -401,201 +337,6 @@ class ControlService:  # noqa: E305
             },
             status,
         )
-
-    async def create_grant(
-        self, raw: Any, authorization: str | None, idempotency_key: str | None
-    ) -> Response:
-        request_id, started = uuid4(), monotonic()
-        operation, action = "grants.create", "admin.write"
-        scope = ("POST", "/v1/grants")
-        if self._invalid_key(idempotency_key):
-            return await self._finish(
-                request_id,
-                started,
-                400,
-                "validation",
-                operation,
-                action,
-                error_code="invalid_idempotency_key",
-            )
-        try:
-            body = GrantCreate.model_validate(raw)
-        except ValidationError:
-            return await self._finish(
-                request_id,
-                started,
-                422,
-                "validation",
-                operation,
-                action,
-                error_code="validation_error",
-            )
-        try:
-            context, evaluation = await authorize_governed_access(
-                self.sessions, authorization, *CONTROL_SCOPES[scope]
-            )
-        except AuthenticationFailed:
-            return await self._finish(
-                request_id,
-                started,
-                401,
-                "authentication",
-                operation,
-                action,
-                error_code="authentication_failed",
-            )
-        if evaluation.decision.decision == "deny":
-            return await self._finish(
-                request_id,
-                started,
-                403,
-                "authorization",
-                operation,
-                action,
-                error_code="resource_unavailable",
-                context=context,
-                resource_ref=("administrative_control", "grants"),
-                decision=evaluation.decision,
-                authorization_denial_cause=evaluation.denial_cause,
-            )
-
-        canonical_path = "/v1/grants"
-        binding_scope = f"{context.principal.principal_id}|POST|{canonical_path}"
-        payload_hash = _payload_sha256(body.model_dump(mode="json"))
-        try:
-            async with self.sessions() as session, session.begin():
-                prior = await IdempotencyRepository(session).peek(
-                    scope=binding_scope,
-                    key_digest=_key_digest(idempotency_key or ""),
-                    payload_sha256=payload_hash,
-                )
-                if prior is not None:
-                    try:
-                        payload = Grant.model_validate_json(
-                            _canonical_payload(prior.outcome.response_payload)
-                        ).model_dump(mode="json")
-                    except ValidationError:
-                        raise IdempotencyConflictError(binding_scope) from None
-                    return Response(
-                        content=_canonical_payload(payload),
-                        status_code=prior.outcome.response_status,
-                        media_type="application/json",
-                    )
-                principal = await PrincipalRepository(session).get(body.principal_id)
-                if principal is None or principal.status != "active":
-                    return await self._finish(
-                        request_id,
-                        started,
-                        404,
-                        "authorization",
-                        operation,
-                        action,
-                        error_code="resource_not_found",
-                        context=context,
-                        resource_ref=("administrative_control", "grants"),
-                        decision=evaluation.decision,
-                    )
-                fact = await ResourceRepository(session).authorization_view(
-                    body.resource.resource_type, body.resource.resource_id
-                )
-                if fact is None or fact.status != "active":
-                    return await self._finish(
-                        request_id,
-                        started,
-                        404,
-                        "authorization",
-                        operation,
-                        action,
-                        error_code="resource_not_found",
-                        context=context,
-                        resource_ref=("administrative_control", "grants"),
-                        decision=evaluation.decision,
-                    )
-                if not _grant_action_admitted(body.resource.resource_type, body.action):
-                    return await self._finish(
-                        request_id,
-                        started,
-                        422,
-                        "validation",
-                        operation,
-                        action,
-                        error_code="validation_error",
-                    )
-                binding = await IdempotencyRepository(session).claim_or_replay(
-                    scope=binding_scope,
-                    key_digest=_key_digest(idempotency_key or ""),
-                    payload_sha256=payload_hash,
-                    principal_id=context.principal.principal_id,
-                    method="POST",
-                    canonical_path=canonical_path,
-                    binding="at_least_24h",
-                    outcome=IdempotencyOutcome(
-                        response_status=201,
-                        resource_id=body.grant_id,
-                        replayed=False,
-                    ),
-                )
-                repository = GrantRepository(session)
-                if binding.replayed:
-                    try:
-                        payload = Grant.model_validate_json(
-                            _canonical_payload(binding.outcome.response_payload)
-                        ).model_dump(mode="json")
-                    except ValidationError:
-                        raise IdempotencyConflictError(binding_scope) from None
-                    return Response(
-                        content=_canonical_payload(payload),
-                        status_code=binding.outcome.response_status,
-                        media_type="application/json",
-                    )
-                grant = await repository.create(
-                    body.grant_id,
-                    body.principal_id,
-                    body.action,
-                    body.resource.resource_type,
-                    body.resource.resource_id,
-                )
-                payload = grant.model_dump(mode="json")
-                await IdempotencyRepository(session).set_response_payload(
-                    scope=binding_scope,
-                    key_digest=_key_digest(idempotency_key or ""),
-                    response_payload=payload,
-                )
-                result = await self._finish(
-                    request_id,
-                    started,
-                    binding.outcome.response_status,
-                    "authorization",
-                    operation,
-                    action,
-                    payload=payload,
-                    error_code="grant_matched",
-                    context=context,
-                    resource_ref=("administrative_control", "grants"),
-                    decision=evaluation.decision,
-                    audit_session=session,
-                )
-                if result.status_code == 503:
-                    await session.rollback()
-                    return result
-                return Response(
-                    content=_canonical_payload(payload),
-                    status_code=binding.outcome.response_status,
-                    media_type="application/json",
-                )
-        except (IdempotencyConflictError, IntegrityError, GrantConflictError) as conflict:
-            return await self._finish(
-                request_id,
-                started,
-                409,
-                "authorization",
-                operation,
-                action,
-                error_code=_grant_conflict_code(conflict),
-                context=context,
-                resource_ref=("administrative_control", "grants"),
-                decision=evaluation.decision,
-            )
 
     async def create_alias(
         self, raw: Any, authorization: str | None, idempotency_key: str | None

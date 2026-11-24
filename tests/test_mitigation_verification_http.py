@@ -57,10 +57,12 @@ def operation_grant(request: pytest.FixtureRequest) -> None:
         control = build_service(database, suite.AUDIT_KEY.encode())
         for resource_id, description in SERVICE_OPERATIONS.items():
             body = service_operation(resource_id, description)
-            created = await control.create_catalog_resource(body, admin, resource_id)
+            created = await control.service.create_catalog_resource(body, admin, resource_id)
             assert created.status_code == 201
         [grant] = [body for body in demo_grants() if body["action"] == "mitigation.execute"]
-        assert (await control.create_grant(grant, admin, grant["grant_id"])).status_code == 201
+        assert (
+            await control.grants.create_grant(grant, admin, grant["grant_id"])
+        ).status_code == 201
         await database.dispose()
 
     asyncio.run(setup())

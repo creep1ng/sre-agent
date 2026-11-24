@@ -144,7 +144,8 @@ def test_engine_denial_precedes_target_access_for_every_control_operation(
     import sre_agent.control.service as service_module
 
     for repository in REPOSITORIES:
-        monkeypatch.setattr(service_module, repository, _TargetAccessed)
+        if hasattr(service_module, repository):
+            monkeypatch.setattr(service_module, repository, _TargetAccessed)
 
     service = ControlService.__new__(ControlService)
     service.audit = _Audit()
