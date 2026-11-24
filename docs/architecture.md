@@ -38,16 +38,16 @@ The schema releases remain the contract authority. Runtime models must not repla
 ## Governed extension rule
 
 Future LLM, MCP, skill, and knowledge consumers MUST enter through a declared governed operation.
-Governed gateway, BoK and MCP routes go through one gate, `Gate.run` in
-`src/sre_agent/gate/pipeline.py` (#1021 moves them one group at a time; until its last layer the
-routes not moved yet answer with their own code), in a fixed order: validate the request, authenticate the bearer
+Governed gateway, BoK, MCP and control-plane routes go through one gate, `Gate.run` in
+`src/sre_agent/gate/pipeline.py`, in a fixed order: validate the request, authenticate the bearer
 credential (an inactive principal is not authenticated), authorize the scope, run the use case,
 write the terminal audit, respond. A refusal ends the request at its step, so a denied request
 never reaches its use case. Errors are typed (`GovernedError` in `src/sre_agent/gate/errors.py`)
 and become the one envelope `{error, request_id, retryable}`, with `WWW-Authenticate` on a 401
-and the `Retry-After` the error carries. The control plane's routes still call
-`authorize_governed_access` (`src/sre_agent/gateway/authentication.py`) and move to the gate in
-#1022.
+and the `Retry-After` the error carries. The control plane runs on the gate through
+`src/sre_agent/control/governed.py` (its refusals, audit event and in-transaction audit), one
+module per resource. A route that authenticates and evaluates a scope in one call uses
+`authorize_governed_access` (`src/sre_agent/gate/authentication.py`) as the gate's `admit`.
 
 1. Declare Bearer security and the server-owned `(action, resource_type, resource_id)` scope.
 2. Run the request through the gate: pass the route's validation, its scope and its use case to

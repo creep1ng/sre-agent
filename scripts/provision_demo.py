@@ -1,4 +1,4 @@
-"""Prepare only explicit demo grants using the existing governed ControlService.
+"""Prepare only explicit demo grants using the existing governed control plane.
 
 Run in the seed container, after the ordinary and MCP seeds. No provider/MCP
 secret is needed. A revoked setup grant is restored under a new id, as the seed

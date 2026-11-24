@@ -1,4 +1,4 @@
-"""Publish and activate the demo Skills through the governed ControlService.
+"""Publish and activate the demo Skills through the governed control plane.
 
 A clean install seeds principals, credentials and model aliases but no Skill, so
 nothing can be granted or resolved on the Skills side of the console. Run in the

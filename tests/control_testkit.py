@@ -3,7 +3,6 @@
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
-from sre_agent.control.service import ControlService
 from sre_agent.gate.pipeline import Gate
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.governance.authorization import AuthorizationDenialCause, AuthorizationEvaluation
@@ -55,7 +54,3 @@ def _gate(monkeypatch, context, evaluation=None) -> AsyncMock:
 def _routes(routes_class, sessions=None):
     """A resource's routes on the gate, with an audit sink that accepts every event."""
     return routes_class(sessions, _Audit(), AuditProjector(b"x" * 32))
-
-
-def _service() -> ControlService:
-    return ControlService(None, _Audit(), AuditProjector(b"x" * 32))

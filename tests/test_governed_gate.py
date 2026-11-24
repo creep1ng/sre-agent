@@ -1,7 +1,7 @@
 """Every governed operation goes through the gate (`sre_agent.gate`).
 
 Two walks: the operations that document `x-governed-scope` in `openapi.json` must be registered
-with the same scope, and every non-control `/v1/` route of the application must be registered,
+with the same scope, and every `/v1/` route of the application must be registered,
 or exempt for a named reason, and must reach `Gate.run` when called. A route that keeps its
 registration but answers by hand fails the second walk.
 """
@@ -17,8 +17,6 @@ from sre_agent.application import create_application
 from sre_agent.gate.pipeline import Gate, governed_operations
 from sre_agent.settings import Settings
 
-# The control plane's routes move to the gate with its own refactor (#1022).
-CONTROL_PACKAGE = "sre_agent.control."
 EXEMPT = {
     # It authenticates the caller and names it; no scope is asked of it.
     ("GET", "/v1/whoami"): "identity only",
@@ -50,9 +48,7 @@ def _gateway_operations(application: Any) -> set[tuple[str, str]]:
     return {
         (method, route.path)
         for route in application.routes
-        if isinstance(route, APIRoute)
-        and route.path.startswith("/v1/")
-        and not route.endpoint.__module__.startswith(CONTROL_PACKAGE)
+        if isinstance(route, APIRoute) and route.path.startswith("/v1/")
         for method in route.methods
     }
 

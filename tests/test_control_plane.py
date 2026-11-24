@@ -26,7 +26,6 @@ from sre_agent.control.grants import GrantRoutes, grants_router
 from sre_agent.control.operations import CONTROL_OPERATIONS, CONTROL_SCOPES
 from sre_agent.control.principals import PrincipalRoutes, principals_router
 from sre_agent.control.principals import public_principal as _public_principal
-from sre_agent.control.service import ControlService
 from sre_agent.control.skills import SkillPublishRequest, SkillRoutes, skills_router
 from sre_agent.gate.pipeline import Gate
 from sre_agent.gateway.audit import AuditProjector
@@ -272,65 +271,49 @@ def test_control_projector_rejects_llm_routing_evidence() -> None:
         raise AssertionError("allow without grant must fail")
 
 
-def test_finish_maps_terminal_attempts_to_valid_control_audit() -> None:
-    import asyncio
-
+def test_control_audit_maps_terminal_attempts_to_valid_control_audit() -> None:
+    """The control audit event of an allowed 200 at a stage without subject evidence, and of a
+    denied 403 at authorization (what ControlService._finish projected before the gate)."""
+    from sre_agent.control.governed import ControlAudit
+    from sre_agent.control.operations import CONTROL
     from sre_agent.governance.dto import PolicyDecision
 
-    projector = AuditProjector(b"x" * 32)
-    appended: list = []
-
-    class Audit:
-        async def append(self, event):
-            appended.append(event)
-            return event
-
-    service = ControlService.__new__(ControlService)
-    service.projector = projector
-    service.audit = Audit()
-
-    async def run() -> None:
-        allow = PolicyDecision(decision="allow", reason_code="grant_matched", policy_id="g")
-        deny = PolicyDecision(decision="deny", reason_code="no_matching_grant", policy_id=None)
-        now = datetime(2026, 9, 4, tzinfo=UTC)
-        context = type(
-            "Context",
-            (),
-            {
-                "principal": _principal(),
-                "credential_id": "credential-admin-human",
-                "authenticated_at": now,
-            },
-        )()
-        ok_200 = await service._finish(
+    audit = ControlAudit(None, AuditProjector(b"x" * 32))  # type: ignore[arg-type]
+    allow = PolicyDecision(decision="allow", reason_code="grant_matched", policy_id="g")
+    deny = PolicyDecision(decision="deny", reason_code="no_matching_grant", policy_id=None)
+    now = datetime(2026, 9, 4, tzinfo=UTC)
+    context = type(
+        "Context",
+        (),
+        {
+            "principal": _principal(),
+            "credential_id": "credential-admin-human",
+            "authenticated_at": now,
+        },
+    )()
+    appended = [
+        audit.event(
+            CONTROL[("GET", "/v1/principals")],
             uuid4(),
-            0.0,
             200,
+            0,
             "audit",
-            "principals.list",
-            "admin.read",
-            payload={"items": []},
             context=context,
-            resource_ref=("administrative_control", "principals"),
-            decision=allow,
-        )
-        assert ok_200.status_code == 200
-        denied_403 = await service._finish(
+            evaluation=AuthorizationEvaluation(allow, None),
+            reason=None,
+        ),
+        audit.event(
+            CONTROL[("POST", "/v1/principals")],
             uuid4(),
-            0.0,
             403,
+            0,
             "authorization",
-            "principals.create",
-            "admin.write",
-            error_code="resource_unavailable",
             context=context,
-            resource_ref=("administrative_control", "principals"),
-            decision=deny,
-            authorization_denial_cause="grant_not_applicable",
-        )
-        assert denied_403.status_code == 403
-
-    asyncio.run(run())
+            evaluation=AuthorizationEvaluation(deny, AuthorizationDenialCause.GRANT_NOT_APPLICABLE),
+            reason="resource_unavailable",
+        ),
+    ]
+    assert [event.response_status for event in appended] == [200, 403]
     assert [event.stage for event in appended] == ["audit", "authorization"]
     assert appended[0].identity is None and appended[0].resource is None
     assert appended[0].reason_code is None
