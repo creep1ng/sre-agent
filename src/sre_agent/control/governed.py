@@ -109,6 +109,11 @@ def idempotency_key(value: str | None) -> str:
     return value
 
 
+def unaudited(admission: Admission, status: int) -> None:
+    """The use case answers `status` without an audit row (an idempotent replay)."""
+    admission.facts[_SETTLED] = status
+
+
 def audited_as(admission: Admission, reason: str) -> None:
     """The audit reason of a refusal the route answers with its own body (a rotation failure)."""
     admission.facts[_REASON] = reason
@@ -183,9 +188,9 @@ def _latency(facts: dict[str, Any]) -> int:
     return max(0, int((monotonic() - facts[_STARTED]) * 1000))
 
 
-# Writes the request's audit, answering the given status, inside the given transaction; the use
-# case calls it before its transaction commits.
-Record = Callable[[AsyncSession, int], Awaitable[None]]
+# Writes the request's audit, answering the given status (and reason, if not the route's own),
+# inside the given transaction; the use case calls it before its transaction commits.
+Record = Callable[..., Awaitable[None]]
 
 
 class ControlGate(Generic[T]):
@@ -223,8 +228,8 @@ class ControlGate(Generic[T]):
 
     def record(self, admission: Admission) -> Record:
         """The in-transaction audit of this request."""
-        return lambda session, status: self.audit.within(
-            self.operation, admission, session, status, self.reason
+        return lambda session, status, reason=None: self.audit.within(
+            self.operation, admission, session, status, reason or self.reason
         )
 
     async def _audit(self, terminal: Terminal) -> None:

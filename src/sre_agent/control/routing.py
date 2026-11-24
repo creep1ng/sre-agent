@@ -62,6 +62,11 @@ LIMIT_PARAMETER = {
 }
 
 
+FORBIDDEN_QUERY = {
+    "x-forbidden-query-parameters": ["cursor", "page", "offset", "continuation_token", "next"]
+}
+
+
 def request_body(model: type[BaseModel]) -> dict[str, Any]:
     return {
         "requestBody": {

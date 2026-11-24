@@ -169,12 +169,6 @@ def _grant_conflict_code(error: Exception) -> str:
     )
 
 
-class GrantListResponse(BaseModel):
-    items: list[Grant]
-    limit: int
-    truncated: bool
-
-
 class ModelAliasCreate(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
     model_alias_id: Identifier
@@ -2302,84 +2296,6 @@ def control_router(service: ControlService) -> APIRouter:
             authorization_from(credentials, request),
             request.headers.get("idempotency-key"),
         )
-        response.status_code = result.status_code
-        return result
-
-    @router.get(
-        "/v1/grants",
-        response_model=GrantListResponse,
-        responses={
-            401: {"model": ErrorEnvelope},
-            403: {"model": ErrorEnvelope},
-            422: {"model": ErrorEnvelope},
-            503: {"model": ErrorEnvelope},
-        },
-        openapi_extra={
-            "parameters": [
-                {
-                    "name": "principal_id",
-                    "in": "query",
-                    "required": False,
-                    "schema": {"type": "string", "pattern": IDENTIFIER_PATTERN},
-                },
-                {
-                    "name": "resource_id",
-                    "in": "query",
-                    "required": False,
-                    "schema": {"type": "string", "pattern": IDENTIFIER_PATTERN},
-                },
-                {
-                    "name": "limit",
-                    "in": "query",
-                    "required": False,
-                    "schema": {"type": "integer", "default": 100, "minimum": 1, "maximum": 100},
-                },
-            ],
-            "x-required-query-any-of": ["principal_id", "resource_id"],
-            "x-forbidden-query-parameters": [
-                "cursor",
-                "page",
-                "offset",
-                "continuation_token",
-                "next",
-            ],
-            **CONTROL[("GET", "/v1/grants")].openapi_extra,
-        },
-    )
-    async def list_grants(
-        request: Request,
-        response: Response,
-        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
-    ) -> Response:
-        known = {"principal_id", "resource_id", "limit"}
-        result = await service.list_grants(
-            authorization_from(credentials, request),
-            request.query_params.get("principal_id"),
-            request.query_params.get("resource_id"),
-            request.query_params.get("limit", "100"),
-            {key: value for key, value in request.query_params.items() if key not in known},
-        )
-        response.status_code = result.status_code
-        return result
-
-    @router.delete(
-        "/v1/grants/{grant_id}",
-        status_code=204,
-        responses={
-            401: {"model": ErrorEnvelope},
-            403: {"model": ErrorEnvelope},
-            404: {"model": ErrorEnvelope},
-            422: {"model": ErrorEnvelope},
-            503: {"model": ErrorEnvelope},
-        },
-    )
-    async def revoke_grant(
-        grant_id: str,
-        request: Request,
-        response: Response,
-        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
-    ) -> Response:
-        result = await service.revoke_grant(grant_id, authorization_from(credentials, request))
         response.status_code = result.status_code
         return result
 

@@ -17,6 +17,7 @@ from pydantic import ValidationError
 
 from sre_agent.control import operations as scopes
 from sre_agent.control.credentials import CredentialRoutes, credentials_router
+from sre_agent.control.grants import GrantRoutes, grants_router
 from sre_agent.control.operations import CONTROL_OPERATIONS, CONTROL_SCOPES
 from sre_agent.control.principals import PrincipalRoutes, principals_router
 from sre_agent.control.principals import public_principal as _public_principal
@@ -339,11 +340,7 @@ def test_finish_maps_terminal_attempts_to_valid_control_audit() -> None:
 
 def _stub_service(monkey_result=None, status=201, payload=None):
     service = ControlService.__new__(ControlService)
-    service.revoke_grant = AsyncMock(return_value=Response(status_code=204))
     service.create_grant = AsyncMock(return_value=JSONResponse({}, 201))
-    service.list_grants = AsyncMock(
-        return_value=JSONResponse({"items": [], "limit": 100, "truncated": False}, 200)
-    )
     service.create_alias = AsyncMock(return_value=JSONResponse({}, 201))
     service.list_aliases = AsyncMock(
         return_value=JSONResponse({"items": [], "limit": 100, "truncated": False}, 200)
@@ -373,13 +370,23 @@ def _stub_principals(status=201, payload=None) -> PrincipalRoutes:
     return routes
 
 
-def _control_app(service, principals, credentials=None) -> FastAPI:
+def _stub_grants() -> GrantRoutes:
+    routes = GrantRoutes.__new__(GrantRoutes)
+    routes.revoke_grant = AsyncMock(return_value=Response(status_code=204))
+    routes.list_grants = AsyncMock(
+        return_value=JSONResponse({"items": [], "limit": 100, "truncated": False}, 200)
+    )
+    return routes
+
+
+def _control_app(service, principals, credentials=None, grants=None) -> FastAPI:
     """Every control router, as the application mounts them."""
     app = FastAPI()
     app.include_router(principals_router(principals))
     app.include_router(
         credentials_router(credentials or CredentialRoutes.__new__(CredentialRoutes))
     )
+    app.include_router(grants_router(grants or _stub_grants()))
     app.include_router(control_router(service))
     return app
 

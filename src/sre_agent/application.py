@@ -32,6 +32,7 @@ from sre_agent.gateway.mcp import (
     mcp_router,
 )
 from sre_agent.control.credentials import CredentialRoutes, credentials_router
+from sre_agent.control.grants import GrantRoutes, grants_router
 from sre_agent.control.principals import PrincipalRoutes, principals_router
 from sre_agent.control.service import ControlService, control_router
 from sre_agent.control.consumption_limits import (
@@ -234,6 +235,7 @@ def create_application(
         application.include_router(
             credentials_router(CredentialRoutes(database.sessions, store, projector))
         )
+        application.include_router(grants_router(GrantRoutes(database.sessions, store, projector)))
         application.include_router(
             control_router(ControlService(database.sessions, store, projector))
         )
