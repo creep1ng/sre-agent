@@ -341,9 +341,6 @@ def _stub_service(monkey_result=None, status=201, payload=None):
     from sre_agent.control.service import ControlService
 
     service = ControlService.__new__(ControlService)
-    service.create_principal = AsyncMock(
-        return_value=JSONResponse(payload or _public_principal(_principal("new-human")), status)
-    )
     service.revoke_grant = AsyncMock(return_value=Response(status_code=204))
     service.create_grant = AsyncMock(return_value=JSONResponse({}, 201))
     service.list_grants = AsyncMock(
@@ -364,8 +361,11 @@ def _stub_service(monkey_result=None, status=201, payload=None):
     return service
 
 
-def _stub_principals() -> PrincipalRoutes:
+def _stub_principals(status=201, payload=None) -> PrincipalRoutes:
     routes = PrincipalRoutes.__new__(PrincipalRoutes)
+    routes.create_principal = AsyncMock(
+        return_value=JSONResponse(payload or _public_principal(_principal("new-human")), status)
+    )
     routes.list_principals = AsyncMock(
         return_value=JSONResponse({"items": [], "limit": 100, "truncated": False}, 200)
     )

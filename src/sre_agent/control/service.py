@@ -3197,62 +3197,6 @@ def control_router(service: ControlService) -> APIRouter:
     bearer_scheme = HTTPBearer(auto_error=False, description="Administrative bearer credential")
     bearer_credentials: Any = Security(bearer_scheme)
 
-    @router.post(
-        "/v1/principals",
-        status_code=201,
-        response_model=Principal,
-        responses={
-            400: {"model": ErrorEnvelope, "description": "Invalid idempotency key"},
-            401: {"model": ErrorEnvelope, "description": "Authentication failed"},
-            403: {"model": ErrorEnvelope, "description": "Resource unavailable"},
-            409: {"model": ErrorEnvelope, "description": "Idempotency conflict"},
-            422: {"model": ErrorEnvelope, "description": "Validation error"},
-            503: {"model": ErrorEnvelope, "description": "Audit unavailable"},
-        },
-        openapi_extra={
-            "parameters": [
-                {
-                    "name": "Idempotency-Key",
-                    "in": "header",
-                    "required": True,
-                    "description": (
-                        "Client-owned request key, not configuration or a secret. Generate a fresh "
-                        "key per logical mutation; reuse it only to retry the identical payload. "
-                        "A different payload returns 409 idempotency_conflict."
-                    ),
-                    "schema": {
-                        "type": "string",
-                        "minLength": 16,
-                        "maxLength": 128,
-                        "pattern": IDEMPOTENCY_KEY_PATTERN,
-                    },
-                }
-            ],
-            "requestBody": {
-                "required": True,
-                "content": {"application/json": {"schema": PrincipalCreate.model_json_schema()}},
-            },
-            **CONTROL[("POST", "/v1/principals")].openapi_extra,
-        },
-    )
-    async def create_principal(
-        request: Request,
-        response: Response,
-        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
-    ) -> Response:
-        try:
-            body = await request.json()
-        except Exception:
-            body = None
-        authorization = f"{credentials.scheme} {credentials.credentials}" if credentials else None
-        result = await service.create_principal(
-            body,
-            authorization or request.headers.get("authorization"),
-            request.headers.get("idempotency-key"),
-        )
-        response.status_code = result.status_code
-        return result
-
     async def raw_json(request: Request) -> Any:
         try:
             return await request.json()
@@ -3265,30 +3209,6 @@ def control_router(service: ControlService) -> APIRouter:
         if credentials is not None:
             return f"{credentials.scheme} {credentials.credentials}"
         return request.headers.get("authorization")
-
-    @router.put(
-        "/v1/principals/{principal_id}/status",
-        response_model=Principal,
-        responses={
-            401: {"model": ErrorEnvelope},
-            403: {"model": ErrorEnvelope},
-            404: {"model": ErrorEnvelope},
-            409: {"model": ErrorEnvelope},
-            422: {"model": ErrorEnvelope},
-            503: {"model": ErrorEnvelope},
-        },
-    )
-    async def replace_principal_status(
-        principal_id: str,
-        request: Request,
-        response: Response,
-        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
-    ) -> Response:
-        result = await service.replace_principal_status(
-            principal_id, await raw_json(request), authorization_from(credentials, request)
-        )
-        response.status_code = result.status_code
-        return result
 
     @router.post(
         "/v1/principals/{principal_id}/credentials",
