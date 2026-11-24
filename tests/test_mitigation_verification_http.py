@@ -57,7 +57,7 @@ def operation_grant(request: pytest.FixtureRequest) -> None:
         control = build_service(database, suite.AUDIT_KEY.encode())
         for resource_id, description in SERVICE_OPERATIONS.items():
             body = service_operation(resource_id, description)
-            created = await control.service.create_catalog_resource(body, admin, resource_id)
+            created = await control.catalog.create_catalog_resource(body, admin, resource_id)
             assert created.status_code == 201
         [grant] = [body for body in demo_grants() if body["action"] == "mitigation.execute"]
         assert (

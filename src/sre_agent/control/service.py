@@ -1245,52 +1245,6 @@ def control_router(service: ControlService) -> APIRouter:
         return request.headers.get("authorization")
 
     @router.post(
-        "/v1/catalog/resources",
-        status_code=201,
-        response_model=ResourceCatalogEntry,
-        responses={
-            400: {"model": ErrorEnvelope},
-            401: {"model": ErrorEnvelope},
-            403: {"model": ErrorEnvelope},
-            409: {"model": ErrorEnvelope},
-            422: {"model": ErrorEnvelope},
-            503: {"model": ErrorEnvelope},
-        },
-        openapi_extra={
-            "parameters": [
-                {
-                    "name": "Idempotency-Key",
-                    "in": "header",
-                    "required": True,
-                    "schema": {
-                        "type": "string",
-                        "minLength": 16,
-                        "maxLength": 128,
-                        "pattern": IDEMPOTENCY_KEY_PATTERN,
-                    },
-                }
-            ],
-            "requestBody": {
-                "required": True,
-                "content": {"application/json": {"schema": CatalogCreate.model_json_schema()}},
-            },
-            **CONTROL[("POST", "/v1/catalog/resources")].openapi_extra,
-        },
-    )
-    async def create_catalog_resource(
-        request: Request,
-        response: Response,
-        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
-    ) -> Response:
-        result = await service.create_catalog_resource(
-            await raw_json(request),
-            authorization_from(credentials, request),
-            request.headers.get("idempotency-key"),
-        )
-        response.status_code = result.status_code
-        return result
-
-    @router.post(
         "/v1/skills/versions",
         status_code=201,
         response_model=SkillVersionRecord,

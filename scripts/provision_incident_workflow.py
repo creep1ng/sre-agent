@@ -124,7 +124,7 @@ async def _granted(service, body: dict) -> bool:
 
 
 async def provision(service, bearer: str) -> ProvisionResult:
-    catalog = await service.service.create_catalog_resource(
+    catalog = await service.catalog.create_catalog_resource(
         CATALOG_BODY, bearer, CATALOG_IDEMPOTENCY_KEY
     )
     grant = await service.grants.create_grant(GRANT_BODY, bearer, GRANT_IDEMPOTENCY_KEY)

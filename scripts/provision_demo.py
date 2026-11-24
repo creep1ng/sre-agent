@@ -229,7 +229,7 @@ async def provision_demo(service, bearer, executor_changes_key=None):
         await seed_bok_demo(session)
     for resource_id, description in SERVICE_OPERATIONS.items():
         body = service_operation(resource_id, description)
-        response = await service.service.create_catalog_resource(
+        response = await service.catalog.create_catalog_resource(
             body, bearer, "setup-v1-" + resource_id
         )
         # 409: an earlier run cataloged it. As given is convergence; anything else fails closed.

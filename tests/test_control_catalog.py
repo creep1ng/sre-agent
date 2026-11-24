@@ -17,8 +17,6 @@ from fastapi.responses import JSONResponse
 
 from sre_agent.control.catalog import CatalogRoutes, catalog_router
 from sre_agent.control.operations import CONTROL_OPERATIONS, CONTROL_SCOPES
-from sre_agent.control.service import ControlService
-from sre_agent.control.service import control_router as build_control_router
 from sre_agent.governance.authorization import AuthorizationEvaluation
 from sre_agent.governance.dto import AuditEvent, PolicyDecision
 
@@ -274,16 +272,14 @@ def test_catalog_denial_precedes_lookup(monkeypatch) -> None:
 
 
 def _stub_catalog_app() -> FastAPI:
-    service = ControlService.__new__(ControlService)
-    service.create_catalog_resource = AsyncMock(return_value=JSONResponse(CATALOG_BODY, 201))
     routes = CatalogRoutes.__new__(CatalogRoutes)
+    routes.create_catalog_resource = AsyncMock(return_value=JSONResponse(CATALOG_BODY, 201))
     routes.list_catalog_resources = AsyncMock(
         return_value=JSONResponse({"items": [], "limit": 100, "truncated": False}, 200)
     )
     routes.get_catalog_resource = AsyncMock(return_value=JSONResponse(CATALOG_BODY, 200))
     app = FastAPI()
     app.include_router(catalog_router(routes))
-    app.include_router(build_control_router(service))
     return app
 
 

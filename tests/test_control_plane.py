@@ -342,7 +342,6 @@ def test_finish_maps_terminal_attempts_to_valid_control_audit() -> None:
 
 def _stub_service(monkey_result=None, status=201, payload=None):
     service = ControlService.__new__(ControlService)
-    service.create_catalog_resource = AsyncMock(return_value=JSONResponse({}, 201))
     return service
 
 
@@ -384,6 +383,7 @@ def _stub_aliases() -> AliasRoutes:
 
 def _stub_catalog() -> CatalogRoutes:
     routes = CatalogRoutes.__new__(CatalogRoutes)
+    routes.create_catalog_resource = AsyncMock(return_value=JSONResponse({}, 201))
     routes.list_catalog_resources = AsyncMock(
         return_value=JSONResponse({"items": [], "limit": 100, "truncated": False}, 200)
     )

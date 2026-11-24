@@ -98,7 +98,7 @@ def agent_grant(request: pytest.FixtureRequest) -> None:
             for resource_id, description in SERVICE_OPERATIONS.items():
                 body = service_operation(resource_id, description)
                 assert (
-                    await control.service.create_catalog_resource(body, admin, resource_id)
+                    await control.catalog.create_catalog_resource(body, admin, resource_id)
                 ).status_code == 201
             [grant] = [body for body in demo_grants() if body["action"] == "mitigation.execute"]
             assert (
