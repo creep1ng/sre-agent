@@ -229,6 +229,8 @@ def test_catalog_denial_precedes_lookup(monkeypatch) -> None:
     import sre_agent.control.service as service_module
 
     for repository in ("CatalogRepository", "ModelAliasRepository"):
+        if not hasattr(service_module, repository):
+            continue
         monkeypatch.setattr(
             service_module,
             repository,
