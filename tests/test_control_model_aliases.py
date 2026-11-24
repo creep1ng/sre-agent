@@ -22,9 +22,6 @@ from sre_agent.control.operations import CONTROL_OPERATIONS, CONTROL_SCOPES
 from sre_agent.control.service import (
     ControlService,
 )
-from sre_agent.control.service import (
-    control_router as build_control_router,
-)
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.authentication import AuthenticationFailed
 from sre_agent.governance.authorization import AuthorizationEvaluation
@@ -338,22 +335,16 @@ def test_alias_get_rejects_unauthenticated_before_lookup() -> None:
     assert response.status_code == 401
 
 
-def _stub_alias_service():
-    service = ControlService.__new__(ControlService)
-    created = JSONResponse({**ALIAS_BODY, "status": "active"}, 201)
-    service.create_alias = AsyncMock(return_value=created)
-    return service
-
-
 def _stub_alias_app() -> FastAPI:
     routes = AliasRoutes.__new__(AliasRoutes)
+    created = JSONResponse({**ALIAS_BODY, "status": "active"}, 201)
+    routes.create_alias = AsyncMock(return_value=created)
     routes.list_aliases = AsyncMock(
         return_value=JSONResponse({"items": [], "limit": 100, "truncated": False}, 200)
     )
     routes.get_alias = AsyncMock(return_value=JSONResponse({**ALIAS_BODY, "status": "active"}, 200))
     app = FastAPI()
     app.include_router(aliases_router(routes))
-    app.include_router(build_control_router(_stub_alias_service()))
     return app
 
 

@@ -1821,52 +1821,6 @@ def control_router(service: ControlService) -> APIRouter:
             return f"{credentials.scheme} {credentials.credentials}"
         return request.headers.get("authorization")
 
-    @router.post(
-        "/v1/model-aliases",
-        status_code=201,
-        response_model=ModelAlias,
-        responses={
-            400: {"model": ErrorEnvelope},
-            401: {"model": ErrorEnvelope},
-            403: {"model": ErrorEnvelope},
-            409: {"model": ErrorEnvelope},
-            422: {"model": ErrorEnvelope},
-            503: {"model": ErrorEnvelope},
-        },
-        openapi_extra={
-            "parameters": [
-                {
-                    "name": "Idempotency-Key",
-                    "in": "header",
-                    "required": True,
-                    "schema": {
-                        "type": "string",
-                        "minLength": 16,
-                        "maxLength": 128,
-                        "pattern": IDEMPOTENCY_KEY_PATTERN,
-                    },
-                }
-            ],
-            "requestBody": {
-                "required": True,
-                "content": {"application/json": {"schema": ModelAliasCreate.model_json_schema()}},
-            },
-            **CONTROL[("POST", "/v1/model-aliases")].openapi_extra,
-        },
-    )
-    async def create_alias(
-        request: Request,
-        response: Response,
-        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
-    ) -> Response:
-        result = await service.create_alias(
-            await raw_json(request),
-            authorization_from(credentials, request),
-            request.headers.get("idempotency-key"),
-        )
-        response.status_code = result.status_code
-        return result
-
     @router.put(
         "/v1/model-aliases/{alias_id}/assignment",
         response_model=ModelAlias,
