@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+from pydantic import ValidationError
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from sqlalchemy.exc import IntegrityError
@@ -673,9 +674,10 @@ class CatalogRepository:
     """Closed owner-backed catalog reads and admin creates over resource rows.
 
     Only catalog resource types enumerate here; administrative_control never
-    does. Hidden and inactive entries never enumerate in lists and read as
-    the safe 404; revoked and other lifecycle states remain discoverable.
-    The projection never leaks ModelAlias routing or secrets.
+    does, and a row that does not project as a catalog entry reads as absent.
+    Which visibilities and states a caller may find is the use case's
+    decision (`control/catalog.py`). The projection never leaks ModelAlias
+    routing or secrets.
     """
 
     CATALOG_TYPES = (
@@ -735,7 +737,7 @@ class CatalogRepository:
             return None
         try:
             return project_catalog_entry(row)
-        except Exception:
+        except ValidationError:
             return None
 
     async def list(
@@ -745,13 +747,15 @@ class CatalogRepository:
         owner_id: str | None = None,
         status: str | None = None,
         visibility: str | None = None,
+        excluded_visibility: tuple[str, ...] = (),
+        excluded_status: tuple[str, ...] = (),
         limit: int,
     ) -> tuple[list[ResourceCatalogEntry], bool]:
-        statement = select(ResourceRow).where(
-            ResourceRow.resource_type.in_(self.CATALOG_TYPES),
-            ResourceRow.visibility != "hidden",
-            ResourceRow.status != "inactive",
-        )
+        statement = select(ResourceRow).where(ResourceRow.resource_type.in_(self.CATALOG_TYPES))
+        if excluded_visibility:
+            statement = statement.where(ResourceRow.visibility.not_in(excluded_visibility))
+        if excluded_status:
+            statement = statement.where(ResourceRow.status.not_in(excluded_status))
         if resource_type is not None:
             statement = statement.where(ResourceRow.resource_type == resource_type)
         if owner_id is not None:
@@ -759,8 +763,6 @@ class CatalogRepository:
         if status is not None:
             statement = statement.where(ResourceRow.status == status)
         if visibility is not None:
-            if visibility == "hidden":
-                return [], False
             statement = statement.where(ResourceRow.visibility == visibility)
         rows = (
             await self._session.scalars(
@@ -774,7 +776,7 @@ class CatalogRepository:
         for row in rows[:limit]:
             try:
                 items.append(project_catalog_entry(row))
-            except Exception:
+            except ValidationError:
                 continue
         return items, truncated
 

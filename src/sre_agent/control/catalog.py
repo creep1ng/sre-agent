@@ -84,6 +84,10 @@ Tag = Annotated[str, Field(min_length=1, max_length=50, pattern=r"^[a-z0-9][a-z0
 ResourceId = Annotated[str, Field(min_length=1, max_length=200, pattern=RESOURCE_ID_PATTERN)]
 
 
+# What a caller never finds in a list, and reads as missing.
+HIDDEN, INACTIVE = ("hidden",), ("inactive",)
+
+
 class CatalogDiscoverabilityCreate(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
     display_name: Annotated[str, Field(min_length=1, max_length=200)]
@@ -180,8 +184,13 @@ class Catalog:
         return payload, status, False
 
     async def list(self, filters: dict[str, Any], limit: int) -> dict[str, Any]:
+        """Hidden and inactive entries are never listed; revoked and other states are."""
+        if filters["visibility"] in HIDDEN:
+            return {"items": [], "limit": limit, "truncated": False}
         async with self.sessions() as session:
-            items, truncated = await CatalogRepository(session).list(**filters, limit=limit)
+            items, truncated = await CatalogRepository(session).list(
+                **filters, excluded_visibility=HIDDEN, excluded_status=INACTIVE, limit=limit
+            )
         return {
             "items": [item.model_dump(mode="json") for item in items],
             "limit": limit,
@@ -192,8 +201,8 @@ class Catalog:
         """An entry a caller may find: hidden and inactive ones read as missing."""
         async with self.sessions() as session:
             entry = await CatalogRepository(session).get(resource_type, resource_id)
-        hidden = entry is None or entry.discoverability.visibility == "hidden"
-        if hidden or entry.status == "inactive":
+        hidden = entry is None or entry.discoverability.visibility in HIDDEN
+        if hidden or entry.status in INACTIVE:
             raise NOT_FOUND
         return entry.model_dump(mode="json")
 
