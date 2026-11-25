@@ -1,6 +1,6 @@
 """Credentials: the API keys a principal authenticates with, issued, listed, revoked and rotated."""
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 from fastapi import APIRouter, Request, Response
@@ -121,29 +121,35 @@ class RotationRefused(GovernedError):
         }
 
 
-async def _claim(
-    session: Any, caller: PrincipalContext, path: str, key: str, body: Any, target: str
-) -> Any:
-    return await IdempotencyRepository(session).claim_or_replay(
-        scope=f"{caller.principal.principal_id}|POST|{path}",
-        key_digest=key_digest(key),
-        payload_sha256=payload_sha256(body.model_dump(mode="json")),
-        principal_id=caller.principal.principal_id,
-        method="POST",
-        canonical_path=path,
-        binding="principal_lifetime",
-        outcome=IdempotencyOutcome(response_status=201, resource_id=target, replayed=False),
-    )
+@dataclass(frozen=True)
+class _Keyed:
+    """One idempotent credential request: who asks, at which path, under which key. Its claim
+    and the response stored for a replay share the scope these name."""
 
+    caller: PrincipalContext
+    path: str
+    key: str
 
-async def _remember(
-    session: Any, caller: PrincipalContext, path: str, key: str, payload: Any
-) -> None:
-    await IdempotencyRepository(session).set_response_payload(
-        scope=f"{caller.principal.principal_id}|POST|{path}",
-        key_digest=key_digest(key),
-        response_payload=payload,
-    )
+    @property
+    def scope(self) -> str:
+        return f"{self.caller.principal.principal_id}|POST|{self.path}"
+
+    async def claim(self, session: Any, body: CredentialIssue, target: str) -> Any:
+        return await IdempotencyRepository(session).claim_or_replay(
+            scope=self.scope,
+            key_digest=key_digest(self.key),
+            payload_sha256=payload_sha256(body.model_dump(mode="json")),
+            principal_id=self.caller.principal.principal_id,
+            method="POST",
+            canonical_path=self.path,
+            binding="principal_lifetime",
+            outcome=IdempotencyOutcome(response_status=201, resource_id=target, replayed=False),
+        )
+
+    async def remember(self, session: Any, payload: Any) -> None:
+        await IdempotencyRepository(session).set_response_payload(
+            scope=self.scope, key_digest=key_digest(self.key), response_payload=payload
+        )
 
 
 class Credentials:
@@ -156,12 +162,12 @@ class Credentials:
         self, caller: PrincipalContext, principal_id: str, body: CredentialIssue, key: str
     ) -> dict[str, Any]:
         """A new key, once; a replay answers its metadata without the secret."""
-        path = f"/v1/principals/{principal_id}/credentials"
+        keyed = _Keyed(caller, f"/v1/principals/{principal_id}/credentials", key)
         try:
             async with self.sessions() as session, session.begin():
                 if await PrincipalRepository(session).get(principal_id) is None:
                     raise NOT_FOUND
-                binding = await _claim(session, caller, path, key, body, principal_id)
+                binding = await keyed.claim(session, body, principal_id)
                 if binding.replayed:
                     return binding.outcome.response_payload
                 with failing_as(ISSUANCE_FAILED):
@@ -173,7 +179,7 @@ class Credentials:
                     "replaced_credential_id": None,
                     "secret_revealed": False,
                 }
-                await _remember(session, caller, path, key, metadata)
+                await keyed.remember(session, metadata)
         except IdempotencyConflictError:
             raise IDEMPOTENCY_CONFLICT from None
         return {**metadata, "key": issued.key, "secret_revealed": True}
@@ -202,14 +208,14 @@ class Credentials:
         self, caller: PrincipalContext, credential_id: str, body: CredentialIssue, key: str
     ) -> dict[str, Any]:
         """Replace an active credential by a new key; `RotationRefused` when nothing changed."""
-        path = f"/v1/credentials/{credential_id}/rotation"
+        keyed = _Keyed(caller, f"/v1/credentials/{credential_id}/rotation", key)
         try:
             async with self.sessions() as session, session.begin():
                 repository = CredentialRepository(session)
                 old = await repository.get(credential_id)
                 if old is None:
                     raise NOT_FOUND
-                binding = await _claim(session, caller, path, key, body, credential_id)
+                binding = await keyed.claim(session, body, credential_id)
                 if binding.replayed:
                     return {**binding.outcome.response_payload, "replayed": True}
                 if old.status != "active":
@@ -230,7 +236,7 @@ class Credentials:
                     "transition_count": 1,
                     "replayed": False,
                 }
-                await _remember(session, caller, path, key, metadata)
+                await keyed.remember(session, metadata)
         except IdempotencyConflictError:
             raise IDEMPOTENCY_CONFLICT from None
         issuance = {**metadata["issuance"], "key": issued.key, "secret_revealed": True}
