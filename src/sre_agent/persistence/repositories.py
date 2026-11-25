@@ -671,6 +671,12 @@ class ModelAliasRepository:
         raise StaleWriteError(model_alias_id)
 
 
+# What projecting a stored catalog row can raise: `ValidationError` for a value the catalog model
+# rejects, and `TypeError` from `list(row.tags)` when the JSONB `tags` holds a number or a boolean
+# (no CHECK constrains its type). Reads skip such a row (a list leaves it out, a read finds none).
+_UNREADABLE_CATALOG_ROW = (ValidationError, TypeError)
+
+
 class CatalogRepository:
     """Closed owner-backed catalog reads and admin creates over resource rows.
 
@@ -730,7 +736,7 @@ class CatalogRepository:
             return None
         try:
             return project_catalog_entry(row)
-        except ValidationError:
+        except _UNREADABLE_CATALOG_ROW:
             return None
 
     async def list(
@@ -767,7 +773,7 @@ class CatalogRepository:
         for row in rows[:limit]:
             try:
                 items.append(project_catalog_entry(row))
-            except ValidationError:
+            except _UNREADABLE_CATALOG_ROW:
                 continue
         return items, truncated
 
