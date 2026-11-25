@@ -182,10 +182,12 @@ work unit:
   neither registered nor exempt, for one that answers without the gate, and for a documented
   scope the gate does not hold.
 - **New resource type.** Name it in `ResourceType` and give it its row in `RESOURCE_KINDS`
-  (`src/sre_agent/governance/resources.py`; an assertion at import keeps the two equal): the grant
-  actions admitted over it and, for a catalog type, its source and states. The catalog
-  vocabulary and the `ck_resources_*` database checks derive from them, so the check texts change
-  and need a migration. The release schema enums repeat the vocabulary: extend them too.
+  (`src/sre_agent/governance/resources.py`): the grant actions admitted over it and, for a
+  catalog type, its source and states. A new source or state also goes in `CatalogSource` or
+  `CatalogStatus`; the import fails, naming what differs, while those `Literal`s and the table
+  disagree. The catalog vocabulary and the `ck_resources_*` database checks derive from them, so
+  the check texts change and need a migration. The release schema enums repeat the vocabulary:
+  extend them too.
 - **New audit operation.** A closed vocabulary repeated in the `AuditEvent.operation` Literal of
   `governance/dto.py`, the `ck_audit_events_operation` database check, and the release schema
   enums. Extend every copy, or `AuditEvent` validation rejects the value and the request fails.

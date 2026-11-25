@@ -33,7 +33,7 @@ class ResourceKind(NamedTuple):
 
 
 # The one table of the resource types. `ResourceType` names them once more, because the type
-# checker and the published enum need a static `Literal`; the assertion below keeps both equal.
+# checker and the published enum need a static `Literal`; `_require_same` below keeps both equal.
 # The catalog's vocabulary (types, owning sources, states) and the database CHECKs derive from it;
 # the release schemas publish the same values.
 #
@@ -100,11 +100,33 @@ RESOURCE_KINDS: dict[str, ResourceKind] = {
         frozenset({"mitigation.execute"}), "deploy_executor", ("active", "inactive")
     ),
 }
-assert tuple(RESOURCE_KINDS) == get_args(ResourceType), "ResourceType and RESOURCE_KINDS differ"
+
+
+def _require_same(
+    name: str, declared: tuple[str, ...], derived: tuple[str, ...], *, ordered: bool = False
+) -> None:
+    """Fail at import, naming what differs, when a static `Literal` and `RESOURCE_KINDS` drift
+    apart; `ordered` also requires the same order, which the CHECK texts and enums follow."""
+    missing, extra = set(derived) - set(declared), set(declared) - set(derived)
+    if missing or extra:
+        raise RuntimeError(
+            f"{name} differs from RESOURCE_KINDS: it lacks {sorted(missing)} "
+            f"and adds {sorted(extra)}"
+        )
+    if ordered and declared != derived:
+        raise RuntimeError(
+            f"{name} lists the RESOURCE_KINDS values in another order: {declared} against {derived}"
+        )
+
+
+_require_same("ResourceType", get_args(ResourceType), tuple(RESOURCE_KINDS), ordered=True)
 GRANT_ADMITTED_ACTIONS: dict[str, frozenset[str]] = {
     kind: facts.actions for kind, facts in RESOURCE_KINDS.items()
 }
 
+# The sources and states `RESOURCE_KINDS` gives the catalog types, spelled again as the static
+# `Literal`s the type checker reads; the published enums and the CHECKs keep this order, which
+# the table's per-type tuples do not give for the states. `_require_same` ties both to the table.
 CatalogSource = Literal[
     "model_alias", "mcp", "skill", "bok", "incident_workflow", "deploy_executor"
 ]
@@ -122,6 +144,12 @@ CATALOG_STATES: dict[str, tuple[str, ...]] = {
     kind: RESOURCE_KINDS[kind].states for kind in CATALOG_TYPES
 }
 CATALOG_STATUSES: tuple[str, ...] = get_args(CatalogStatus)
+_require_same("CatalogSource", get_args(CatalogSource), tuple(CATALOG_SOURCE.values()))
+_require_same(
+    "CatalogStatus",
+    CATALOG_STATUSES,
+    tuple(state for states in CATALOG_STATES.values() for state in states),
+)
 CATALOG_VISIBILITIES: tuple[str, ...] = get_args(CatalogVisibility)
 if TYPE_CHECKING:
     # A static subset of ResourceType would spell the types again; the checker gets the superset.
