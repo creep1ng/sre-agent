@@ -43,11 +43,14 @@ Governed gateway, BoK, MCP and control-plane routes go through one gate, `Gate.r
 credential (an inactive principal is not authenticated), authorize the scope, run the use case,
 write the terminal audit, respond. A refusal ends the request at its step, so a denied request
 never reaches its use case. Errors are typed (`GovernedError` in `src/sre_agent/gate/errors.py`)
-and become the one envelope `{error, request_id, retryable}`, with `WWW-Authenticate` on a 401
-and the `Retry-After` the error carries. The control plane runs on the gate through
+and become the one envelope `{error, request_id, retryable}`, with the `WWW-Authenticate` the
+route's refusals declare on a 401 (the control plane declares it only on consumption limits) and
+the `Retry-After` the error carries. The control plane runs on the gate through
 `src/sre_agent/control/governed.py` (its refusals, audit event and in-transaction audit), one
-module per resource. A route that authenticates and evaluates a scope in one call uses
-`authorize_governed_access` (`src/sre_agent/gate/authentication.py`) as the gate's `admit`.
+module per resource. A route that authenticates and evaluates a scope in one call gives the gate
+an `admit` that does both: usage uses `authorize_governed_access` of
+`src/sre_agent/gate/authentication.py`, MCP the function of the same name in
+`src/sre_agent/gateway/authentication.py`.
 
 1. Declare Bearer security and the server-owned `(action, resource_type, resource_id)` scope.
 2. Run the request through the gate: pass the route's validation, its scope and its use case to
@@ -169,7 +172,9 @@ work unit:
 - **New governed control route.** Add one line to `OPERATIONS` in
   `src/sre_agent/control/operations.py` (audit name, method, scope path, served path, action and
   resource id); `CONTROL_SCOPES`, `CONTROL_OPERATIONS` and the route's `x-governed-scope` derive
-  from it. Update the tests that enumerate every control route.
+  from it. An audit name that is new is a new audit operation too (below): its Literal entry,
+  the database check and its migration. Update the tests that enumerate every control route,
+  and add the route's case to `tests/test_governed_gate_routes.py`.
 - **New governed operation.** Register it with `declare(...)` from
   `src/sre_agent/gate/pipeline.py` and answer through `Gate.run` with that declaration, the
   route's validation and its use case. Use the declaration's `openapi_extra` only when the
