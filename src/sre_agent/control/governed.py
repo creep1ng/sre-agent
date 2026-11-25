@@ -103,7 +103,7 @@ def page_limit(limit: Any, extra: dict[str, Any]) -> int:
 
 def idempotency_key(value: str | None) -> str:
     """The request's Idempotency-Key, or the control refusal of a missing or malformed one."""
-    if value is None or re.match(IDEMPOTENCY_KEY_PATTERN, value) is None:
+    if value is None or re.fullmatch(IDEMPOTENCY_KEY_PATTERN, value) is None:
         raise INVALID_IDEMPOTENCY_KEY
     return value
 
