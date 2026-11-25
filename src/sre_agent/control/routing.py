@@ -77,10 +77,12 @@ def request_body(model: type[BaseModel]) -> dict[str, Any]:
 
 
 async def raw_json(request: Request) -> Any:
-    """The request's JSON body, or None for a body that is not JSON (validation refuses it)."""
+    """The request's JSON body, or None for a body that cannot be read as JSON (validation
+    refuses it). Any failure counts, not only a `ValueError`: a body nested deeper than the
+    parser's recursion limit raises `RecursionError`, and must get its audited refusal too."""
     try:
         return await request.json()
-    except ValueError:
+    except Exception:
         return None
 
 
