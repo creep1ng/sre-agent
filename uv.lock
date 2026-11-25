@@ -1520,6 +1520,7 @@ dependencies = [
     { name = "psycopg", extra = ["binary"] },
     { name = "pyyaml" },
     { name = "sqlalchemy" },
+    { name = "typing-extensions" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -1555,6 +1556,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.11.7" },
     { name = "sqlalchemy", specifier = "==2.0.52" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = "==6.0.12.20260906" },
+    { name = "typing-extensions", specifier = "==4.16.0" },
     { name = "uvicorn", extras = ["standard"], specifier = "==0.34.2" },
 ]
 provides-extras = ["dev"]
