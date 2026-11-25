@@ -269,7 +269,10 @@ def principals_router(routes: PrincipalRoutes) -> APIRouter:
         return await routes.get_principal(principal_id, authorization_from(credentials, request))
 
     @router.put(
-        STATUS.route, response_model=Principal, responses=errors(401, 403, 404, 409, 422, 503)
+        STATUS.route,
+        response_model=Principal,
+        responses=errors(401, 403, 404, 409, 422, 503),
+        openapi_extra=STATUS.openapi_extra,
     )
     async def replace_principal_status(
         principal_id: str,

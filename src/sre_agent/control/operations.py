@@ -23,7 +23,8 @@ class ControlOperation:
     resource_id: str
     # The served path, when it names its parameters other than the scope key does.
     route: str = ""
-    # Whether its OpenAPI entry documents the scope as `x-governed-scope`.
+    # Whether its OpenAPI entry documents the scope as `x-governed-scope`: every control route
+    # takes its extras from `openapi_extra`, which is empty for an undocumented one.
     documented: bool = True
 
     def __post_init__(self) -> None:

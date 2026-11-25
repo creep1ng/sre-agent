@@ -307,7 +307,12 @@ def grants_router(routes: GrantRoutes) -> APIRouter:
             unknown_query(request, "principal_id", "resource_id", "limit"),
         )
 
-    @router.delete(REVOKE.route, status_code=204, responses=errors(401, 403, 404, 422, 503))
+    @router.delete(
+        REVOKE.route,
+        status_code=204,
+        responses=errors(401, 403, 404, 422, 503),
+        openapi_extra=REVOKE.openapi_extra,
+    )
     async def revoke_grant(
         grant_id: str,
         request: Request,

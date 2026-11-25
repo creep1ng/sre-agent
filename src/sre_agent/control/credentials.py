@@ -333,7 +333,7 @@ def credentials_router(routes: CredentialRoutes) -> APIRouter:
         status_code=201,
         response_model=CredentialIssueResponse | CredentialMetadataResponse,
         responses=errors(400, 401, 403, 404, 409, 422, 500, 503),
-        openapi_extra={"parameters": [idempotency_key_parameter()]},
+        openapi_extra={"parameters": [idempotency_key_parameter()], **ISSUE.openapi_extra},
     )
     async def issue_credential(
         principal_id: str,
@@ -348,7 +348,10 @@ def credentials_router(routes: CredentialRoutes) -> APIRouter:
         )
 
     @router.get(
-        LIST.route, response_model=CredentialListResponse, responses=errors(401, 404, 422, 503)
+        LIST.route,
+        response_model=CredentialListResponse,
+        responses=errors(401, 404, 422, 503),
+        openapi_extra=LIST.openapi_extra,
     )
     async def list_credentials(
         principal_id: str,
@@ -362,7 +365,12 @@ def credentials_router(routes: CredentialRoutes) -> APIRouter:
             unknown_query(request, "limit"),
         )
 
-    @router.delete(REVOKE.route, status_code=204, responses=errors(401, 403, 404, 422, 503))
+    @router.delete(
+        REVOKE.route,
+        status_code=204,
+        responses=errors(401, 403, 404, 422, 503),
+        openapi_extra=REVOKE.openapi_extra,
+    )
     async def revoke_credential(
         credential_id: str,
         request: Request,
@@ -381,7 +389,7 @@ def credentials_router(routes: CredentialRoutes) -> APIRouter:
             409: {"model": CredentialRotationFailureResponse | ErrorEnvelope},
             **errors(422, 503),
         },
-        openapi_extra={"parameters": [idempotency_key_parameter()]},
+        openapi_extra={"parameters": [idempotency_key_parameter()], **ROTATE.openapi_extra},
     )
     async def rotate_credential(
         credential_id: str,
