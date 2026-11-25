@@ -171,7 +171,7 @@ class MCPServerRow(Base):
     __table_args__ = (
         CK("contract_version = '1.0.0'", name="ck_mcp_servers_contract_version"),
         CK("status IN ('registered','active','inactive')", name="ck_mcp_servers_status"),
-        CK("visibility IN ('public','private','hidden')", name="ck_mcp_servers_visibility"),
+        CK(_among("visibility", CATALOG_VISIBILITIES), name="ck_mcp_servers_visibility"),
         CK("updated_at >= created_at", name="ck_mcp_servers_lifecycle"),
     )
     server_id = mapped_column(String(64), primary_key=True)
@@ -195,7 +195,7 @@ class MCPToolRow(Base):
         ForeignKeyConstraint(["server_id"], ["mcp_servers.server_id"]),
         CK("contract_version = '1.0.0'", name="ck_mcp_tools_contract_version"),
         CK("status IN ('registered','active','inactive')", name="ck_mcp_tools_status"),
-        CK("visibility IN ('public','private','hidden')", name="ck_mcp_tools_visibility"),
+        CK(_among("visibility", CATALOG_VISIBILITIES), name="ck_mcp_tools_visibility"),
         CK("updated_at >= created_at", name="ck_mcp_tools_lifecycle"),
         UniqueConstraint("server_id", "upstream_name", name="uq_mcp_tools_server_upstream"),
     )
@@ -253,7 +253,7 @@ class BoKCollectionVersionRow(Base):
             "status IN ('indexing','ready','active','inactive','revoked')",
             name="ck_bok_versions_status",
         ),
-        CK("visibility IN ('public','private','hidden')", name="ck_bok_versions_visibility"),
+        CK(_among("visibility", CATALOG_VISIBILITIES), name="ck_bok_versions_visibility"),
         CK("updated_at >= created_at", name="ck_bok_versions_lifecycle"),
         CK(
             "origin ~ '^[a-z][a-z0-9-]{1,31}(:[A-Za-z0-9._-]{1,64})?$'",

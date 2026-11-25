@@ -38,7 +38,7 @@ from sre_agent.control.routing import (
 from sre_agent.gate.pipeline import Admission, Released
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.responses import TransactionalAuditStore
-from sre_agent.governance.dto import ModelAlias, PrincipalContext
+from sre_agent.governance.dto import CatalogVisibility, ModelAlias, PrincipalContext
 from sre_agent.persistence.repositories import (
     IdempotencyConflictError,
     IdempotencyOutcome,
@@ -77,7 +77,7 @@ class ModelAliasCreate(BaseModel):
         | None
     ) = None
     display_name: Annotated[str, Field(min_length=1, max_length=200)] | None = None
-    visibility: Literal["public", "private", "hidden"] | None = None
+    visibility: CatalogVisibility | None = None
     description: Annotated[str, Field(max_length=500)] | None = None
     tags: Annotated[list[Tag], Field(max_length=16)] | None = None
 

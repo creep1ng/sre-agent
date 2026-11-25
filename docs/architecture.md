@@ -176,10 +176,14 @@ work unit:
   operation documents `x-governed-scope`. `tests/test_governed_gate.py` fails for a route that is
   neither registered nor exempt, for one that answers without the gate, and for a documented
   scope the gate does not hold.
-- **New resource type or audit operation.** These are closed vocabularies repeated in the
-  `governance/dto.py` Literals, the `ck_resources_type` and `ck_audit_events_operation` database
-  checks, and the release schema enums. Extend every copy, or `AuditEvent` validation rejects the
-  value and the request fails.
+- **New resource type.** Name it in `ResourceType` and give it its row in `RESOURCE_KINDS`
+  (`src/sre_agent/governance/dto.py`; an assertion at import keeps the two equal): the grant
+  actions admitted over it and, for a catalog type, its source and states. The catalog
+  vocabulary and the `ck_resources_*` database checks derive from them, so the check texts change
+  and need a migration. The release schema enums repeat the vocabulary: extend them too.
+- **New audit operation.** A closed vocabulary repeated in the `AuditEvent.operation` Literal of
+  `governance/dto.py`, the `ck_audit_events_operation` database check, and the release schema
+  enums. Extend every copy, or `AuditEvent` validation rejects the value and the request fails.
 - **Backfilling `audit_events`.** The `audit_events_append_only` trigger rejects every `UPDATE`
   and `DELETE`, including a migration's own backfill. A backfilling migration drops the trigger,
   updates the rows, and recreates it in the same transaction, as

@@ -36,9 +36,10 @@ class MeasurementError(Exception):
     pass
 
 
-def declares_catalog_types(tree: ast.AST) -> bool:
-    """Whether a module spells out every catalog resource type in one literal collection,
-    `Literal[...]`, dict's keys or SQL string (#1022)."""
+def catalog_type_declarations(tree: ast.AST) -> int:
+    """How many times a module spells out every catalog resource type in one literal
+    collection, `Literal[...]`, dict's keys or SQL string (#1022)."""
+    declarations = 0
     for node in ast.walk(tree):
         if isinstance(node, ast.Dict):
             values = {key.value for key in node.keys if isinstance(key, ast.Constant)}
@@ -48,9 +49,8 @@ def declares_catalog_types(tree: ast.AST) -> bool:
             values = {kind for kind in CATALOG_TYPES if f"'{kind}'" in node.value}
         else:
             continue
-        if CATALOG_TYPES <= values:
-            return True
-    return False
+        declarations += CATALOG_TYPES <= values
+    return declarations
 
 
 def run(*command: str, allow_no_match: bool = False) -> list[str]:
@@ -285,8 +285,8 @@ def measure() -> dict[str, object]:
         )
         for text in admin.values()
     )
-    out["I38 src files declaring the catalog resource types"] = sum(
-        declares_catalog_types(tree) for tree in trees.values()
+    out["I38 declarations of the catalog resource types in src"] = sum(
+        catalog_type_declarations(tree) for tree in trees.values()
     )
     dirty = bool(run("git", "status", "--porcelain"))
     return {"commit": run("git", "rev-parse", "HEAD")[0], "dirty": dirty, "indicators": out}
