@@ -37,7 +37,8 @@ from sre_agent.gate.errors import GovernedError
 from sre_agent.gate.pipeline import Admission, Released
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.responses import TransactionalAuditStore
-from sre_agent.governance.dto import GRANT_ADMITTED_ACTIONS, Grant, PrincipalContext, Resource
+from sre_agent.governance.dto import Grant, PrincipalContext, Resource
+from sre_agent.governance.resources import GRANT_ADMITTED_ACTIONS
 from sre_agent.persistence.repositories import (
     GrantConflictError,
     GrantRepository,

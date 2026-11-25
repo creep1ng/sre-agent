@@ -20,7 +20,7 @@ from sqlalchemy.sql import func
 from sqlalchemy.sql import text as sql_text
 from sqlalchemy.sql.schema import ForeignKeyConstraint, UniqueConstraint
 
-from sre_agent.governance.dto import (
+from sre_agent.governance.resources import (
     CATALOG_SOURCE,
     CATALOG_STATUSES,
     CATALOG_VISIBILITIES,

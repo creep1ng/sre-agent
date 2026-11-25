@@ -182,7 +182,7 @@ work unit:
   neither registered nor exempt, for one that answers without the gate, and for a documented
   scope the gate does not hold.
 - **New resource type.** Name it in `ResourceType` and give it its row in `RESOURCE_KINDS`
-  (`src/sre_agent/governance/dto.py`; an assertion at import keeps the two equal): the grant
+  (`src/sre_agent/governance/resources.py`; an assertion at import keeps the two equal): the grant
   actions admitted over it and, for a catalog type, its source and states. The catalog
   vocabulary and the `ck_resources_*` database checks derive from them, so the check texts change
   and need a migration. The release schema enums repeat the vocabulary: extend them too.

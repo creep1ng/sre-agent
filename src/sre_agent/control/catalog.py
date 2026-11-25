@@ -38,7 +38,8 @@ from sre_agent.control.routing import (
 from sre_agent.gate.pipeline import Admission, Released
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.responses import TransactionalAuditStore
-from sre_agent.governance.dto import (
+from sre_agent.governance.dto import PrincipalContext, ResourceCatalogEntry
+from sre_agent.governance.resources import (
     CATALOG_SOURCE,
     CATALOG_STATES,
     CATALOG_STATUSES,
@@ -46,8 +47,6 @@ from sre_agent.governance.dto import (
     CATALOG_VISIBILITIES,
     CatalogStatus,
     CatalogVisibility,
-    PrincipalContext,
-    ResourceCatalogEntry,
 )
 from sre_agent.persistence.repositories import (
     CatalogRepository,

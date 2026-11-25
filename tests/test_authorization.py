@@ -9,7 +9,8 @@ from sre_agent.governance.authorization import (
     AuthorizationDenialCause,
     ResourceAuthorizationFact,
 )
-from sre_agent.governance.dto import Grant, Principal, Resource, ResourceType
+from sre_agent.governance.dto import Grant, Principal, Resource
+from sre_agent.governance.resources import ResourceType
 
 NOW = datetime(2026, 9, 3, tzinfo=UTC)
 RESOURCE_TYPES: tuple[ResourceType, ...] = (

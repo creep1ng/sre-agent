@@ -36,7 +36,8 @@ from sre_agent.governance.authorization import (
     AuthorizationEvaluation,
     ResourceFactReader,
 )
-from sre_agent.governance.dto import PrincipalContext, ResourceType
+from sre_agent.governance.dto import PrincipalContext
+from sre_agent.governance.resources import ResourceType
 from sre_agent.persistence.repositories import GrantRepository, OwnerResourceFactReader
 
 T = TypeVar("T")

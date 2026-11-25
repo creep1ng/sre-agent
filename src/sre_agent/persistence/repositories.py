@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from sre_agent.governance.authorization import ResourceAuthorizationFact
 from sre_agent.governance.dto import (
-    CATALOG_TYPES,
     AuditEvent,
     CredentialReference,
     Grant,
@@ -26,6 +25,7 @@ from sre_agent.governance.dto import (
     SkillManifest,
     SkillVersionRecord,
 )
+from sre_agent.governance.resources import CATALOG_TYPES
 from sre_agent.persistence.api_keys import (
     api_key_prefix,
     candidate_prefixes,

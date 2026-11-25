@@ -38,7 +38,8 @@ from sre_agent.control.routing import (
 from sre_agent.gate.pipeline import Admission, Released
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.responses import TransactionalAuditStore
-from sre_agent.governance.dto import CatalogVisibility, ModelAlias, PrincipalContext
+from sre_agent.governance.dto import ModelAlias, PrincipalContext
+from sre_agent.governance.resources import CatalogVisibility
 from sre_agent.persistence.repositories import (
     IdempotencyConflictError,
     IdempotencyOutcome,

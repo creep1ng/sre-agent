@@ -4,7 +4,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal, Protocol
 
-from sre_agent.governance.dto import Grant, PolicyDecision, Principal, ResourceType
+from sre_agent.governance.dto import Grant, PolicyDecision, Principal
+from sre_agent.governance.resources import ResourceType
 
 
 class AuthorizationDenialCause(StrEnum):

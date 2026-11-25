@@ -34,7 +34,8 @@ from sre_agent.governance.authorization import (
     AuthorizationEvaluation,
     ResourceAuthorizationFact,
 )
-from sre_agent.governance.dto import Principal, PrincipalContext, ResourceType
+from sre_agent.governance.dto import Principal, PrincipalContext
+from sre_agent.governance.resources import ResourceType
 from sre_agent.incident.persistence import IncidentRecord, IncidentUnitOfWork, RunRecord
 from sre_agent.incident.projections import (
     RUN_ID_PATTERN,
