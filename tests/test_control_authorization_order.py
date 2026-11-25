@@ -1,13 +1,12 @@
 """Authorization-order proof for every Issue #147 control operation."""
 
 import asyncio
-import sys
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 import pytest
-from control_testkit import _Audit, _TargetAccessed
+from control_testkit import _Audit, _refuse_repositories
 
 from sre_agent.control.aliases import AliasRoutes
 from sre_agent.control.catalog import CatalogRoutes
@@ -247,10 +246,7 @@ def test_engine_denial_precedes_target_access_for_every_control_operation(
     expected_status: int,
 ) -> None:
     """A denied control action cannot probe any target principal or credential."""
-    module = sys.modules[routes_of.__module__]
-    for repository in REPOSITORIES:
-        if hasattr(module, repository):
-            monkeypatch.setattr(module, repository, _TargetAccessed)
+    _refuse_repositories(monkeypatch, REPOSITORIES)
     monkeypatch.setattr(
         "sre_agent.gate.pipeline.active_principal", AsyncMock(return_value=_context())
     )

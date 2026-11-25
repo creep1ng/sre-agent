@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock
 
 import httpx
 import pytest
-from control_testkit import _deny, _gate, _routes, _TargetAccessed
+from control_testkit import _deny, _gate, _refuse_repositories, _routes, _TargetAccessed
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
@@ -199,16 +199,10 @@ def test_alias_create_requires_idempotency_key() -> None:
 
 
 def test_alias_create_denial_precedes_target_access(monkeypatch) -> None:
-    import sre_agent.control.aliases as service_module
-
-    for repository in (
-        "ModelAliasRepository",
-        "GrantRepository",
-        "IdempotencyRepository",
-        "ResourceRepository",
-    ):
-        if hasattr(service_module, repository):
-            monkeypatch.setattr(service_module, repository, _TargetAccessed)
+    _refuse_repositories(
+        monkeypatch,
+        ("ModelAliasRepository", "GrantRepository", "IdempotencyRepository", "ResourceRepository"),
+    )
     _gate(monkeypatch, _context(), _deny())
     service = _routes(AliasRoutes)
 

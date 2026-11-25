@@ -11,7 +11,7 @@ from typing import get_args
 from unittest.mock import AsyncMock
 
 import pytest
-from control_testkit import _context, _deny, _gate, _routes
+from control_testkit import _context, _deny, _gate, _refuse_repositories, _routes
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
@@ -218,24 +218,19 @@ def test_catalog_reads_admit_incident_workflow(monkeypatch) -> None:
 
 
 def test_catalog_denial_precedes_lookup(monkeypatch) -> None:
-    import sre_agent.control.catalog as service_module
-
-    for repository in ("CatalogRepository", "ModelAliasRepository"):
-        if not hasattr(service_module, repository):
-            continue
-        monkeypatch.setattr(
-            service_module,
-            repository,
-            type(
-                "_T",
-                (),
-                {
-                    "__init__": lambda self, *a, **k: (_ for _ in ()).throw(
-                        AssertionError("target access must follow authorization")
-                    )
-                },
-            ),
-        )
+    _refuse_repositories(
+        monkeypatch,
+        ("CatalogRepository", "ModelAliasRepository"),
+        type(
+            "_T",
+            (),
+            {
+                "__init__": lambda self, *a, **k: (_ for _ in ()).throw(
+                    AssertionError("target access must follow authorization")
+                )
+            },
+        ),
+    )
     _gate(monkeypatch, _context(), _deny())
     from contextlib import asynccontextmanager
 

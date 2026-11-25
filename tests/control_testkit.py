@@ -1,5 +1,6 @@
 """Builders shared by the database-free control-plane tests."""
 
+import sys
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
@@ -7,6 +8,7 @@ from sre_agent.gate.pipeline import Gate
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.governance.authorization import AuthorizationDenialCause, AuthorizationEvaluation
 from sre_agent.governance.dto import PolicyDecision, Principal, PrincipalContext
+from sre_agent.persistence import repositories
 
 
 def _context() -> PrincipalContext:
@@ -40,6 +42,22 @@ class _Audit:
 class _TargetAccessed:
     def __init__(self, *_args: object, **_kwargs: object) -> None:
         raise AssertionError("target repository access must follow authorization")
+
+
+def _refuse_repositories(monkeypatch, names, replacement=_TargetAccessed) -> None:
+    """Replace each named repository in every control module that holds it, so a route cannot
+    reach it through a helper module either; a name no control module holds fails the test."""
+    for name in names:
+        repository = getattr(repositories, name)
+        holders = [
+            module
+            for module_name, module in tuple(sys.modules.items())
+            if module_name.startswith("sre_agent.control")
+            and getattr(module, name, None) is repository
+        ]
+        assert holders, f"no control module holds {name}"
+        for module in holders:
+            monkeypatch.setattr(module, name, replacement)
 
 
 def _gate(monkeypatch, context, evaluation=None) -> AsyncMock:
