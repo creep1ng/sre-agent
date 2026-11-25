@@ -65,8 +65,8 @@ class ModelAliasCreate(BaseModel):
     router: Literal["openrouter"]
     inference_provider: Annotated[str, Field(min_length=1, max_length=100)]
     # Additive ADMIN-authoritative catalog projection for llm_model. All
-    # optional so pre-T6 creates keep working; when absent the projection
-    # derives owner/source_ref from the alias with a private default.
+    # optional so pre-T6 creates keep working; `_catalog_projection` decides
+    # what an absent one is.
     owner_id: Identifier | None = None
     source: Literal["model_alias"] | None = None
     source_ref: (
@@ -100,6 +100,20 @@ class ActiveInactiveStatus(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
     status: Literal["active", "inactive"]
     expected_updated_at: AwareDatetime
+
+
+def _catalog_projection(body: ModelAliasCreate) -> dict[str, Any]:
+    """The new alias's catalog fields: those the caller sent, and for the others the alias's
+    own defaults: owned by and sourced from itself, named by its alias, private, with no
+    description and no tags."""
+    return {
+        "owner_id": body.owner_id if body.owner_id is not None else body.model_alias_id,
+        "source_ref": body.source_ref if body.source_ref is not None else body.model_alias_id,
+        "display_name": body.display_name if body.display_name is not None else body.alias,
+        "visibility": body.visibility if body.visibility is not None else "private",
+        "description": body.description if body.description is not None else "",
+        "tags": body.tags if body.tags is not None else [],
+    }
 
 
 class Aliases:
@@ -139,12 +153,7 @@ class Aliases:
                     body.concrete_model,
                     body.router,
                     body.inference_provider,
-                    owner_id=body.owner_id,
-                    source_ref=body.source_ref,
-                    display_name=body.display_name,
-                    visibility=body.visibility,
-                    description=body.description,
-                    tags=body.tags,
+                    **_catalog_projection(body),
                 )
                 payload = alias.model_dump(mode="json")
                 await idempotency.set_response_payload(

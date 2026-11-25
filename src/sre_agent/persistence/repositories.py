@@ -541,13 +541,13 @@ class ModelAliasRepository:
         router: str,
         inference_provider: str,
         *,
+        owner_id: str,
+        source_ref: str,
+        display_name: str,
+        visibility: str,
+        description: str,
+        tags: list[str],
         now: datetime | None = None,
-        owner_id: str | None = None,
-        source_ref: str | None = None,
-        display_name: str | None = None,
-        visibility: str | None = None,
-        description: str | None = None,
-        tags: list[str] | None = None,
     ) -> ModelAlias:
         issued_at = now or datetime.now(UTC)
         row = ResourceRow(
@@ -560,13 +560,13 @@ class ModelAliasRepository:
             concrete_model=concrete_model,
             router=router,
             inference_provider=inference_provider,
-            owner_id=owner_id if owner_id is not None else model_alias_id,
+            owner_id=owner_id,
             source="model_alias",
-            source_ref=source_ref if source_ref is not None else model_alias_id,
-            display_name=display_name if display_name is not None else alias,
-            visibility=visibility if visibility is not None else "private",
-            description=description if description is not None else "",
-            tags=list(tags) if tags is not None else [],
+            source_ref=source_ref,
+            display_name=display_name,
+            visibility=visibility,
+            description=description,
+            tags=list(tags),
         )
         self._session.add(row)
         await self._session.flush()

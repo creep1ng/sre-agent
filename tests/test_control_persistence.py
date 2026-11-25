@@ -105,6 +105,12 @@ async def test_alias_assignment_allows_exactly_one_concurrent_writer() -> None:
             "openai/gpt-4o-mini",
             "openrouter",
             "openai",
+            owner_id="cas-alias",
+            source_ref="cas-alias",
+            display_name="cas-alias",
+            visibility="private",
+            description="",
+            tags=[],
             now=original,
         )
 
@@ -150,7 +156,17 @@ async def test_alias_mutations_hide_absent_inactive_and_reject_stale_tokens() ->
     async with database.transaction() as session:
         repository = ModelAliasRepository(session)
         await repository.create(
-            "cas-retired", "cas-retired", "openai/gpt-4o-mini", "openrouter", "openai"
+            "cas-retired",
+            "cas-retired",
+            "openai/gpt-4o-mini",
+            "openrouter",
+            "openai",
+            owner_id="cas-retired",
+            source_ref="cas-retired",
+            display_name="cas-retired",
+            visibility="private",
+            description="",
+            tags=[],
         )
         retired = await repository.get("cas-retired")
         assert retired is not None
