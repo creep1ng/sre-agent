@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measure the EP-14 code-quality indicators I01-I37 of a full git checkout (#1016).
+"""Measure the EP-14 code-quality indicators I01-I38 of a full git checkout (#1016).
 
 Usage: quality_indicators.py [REPO] [--json]. Definitions, baselines and targets are in
 docs/quality-indicators.md. The script needs git, ripgrep and a .git in REPO; when any of
@@ -21,10 +21,36 @@ CORE = ("incident", "investigator", "triage", "chat", "bok", "governance", "exec
 LIVE = ("src/", "tests/", "web/", "agent/", "migrations/")
 WORKFLOW = "agent/workflows/incident-response.yaml"
 CONSOLE = "web/incident-console"
+CATALOG_TYPES = {
+    "llm_model",
+    "mcp_server",
+    "mcp_tool",
+    "skill",
+    "bok_collection",
+    "incident_workflow",
+    "service_operation",
+}
 
 
 class MeasurementError(Exception):
     pass
+
+
+def catalog_type_declarations(tree: ast.AST) -> int:
+    """How many times a module spells out every catalog resource type in one literal
+    collection, `Literal[...]`, dict's keys or SQL string (#1022)."""
+    declarations = 0
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Dict):
+            values = {key.value for key in node.keys if isinstance(key, ast.Constant)}
+        elif isinstance(node, ast.Tuple | ast.List | ast.Set):
+            values = {item.value for item in node.elts if isinstance(item, ast.Constant)}
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            values = {kind for kind in CATALOG_TYPES if f"'{kind}'" in node.value}
+        else:
+            continue
+        declarations += CATALOG_TYPES <= values
+    return declarations
 
 
 def run(*command: str, allow_no_match: bool = False) -> list[str]:
@@ -258,6 +284,9 @@ def measure() -> dict[str, object]:
             len(re.findall(r"const \[error, setError\] = useState\b", text)),
         )
         for text in admin.values()
+    )
+    out["I38 declarations of the catalog resource types in src"] = sum(
+        catalog_type_declarations(tree) for tree in trees.values()
     )
     dirty = bool(run("git", "status", "--porcelain"))
     return {"commit": run("git", "rev-parse", "HEAD")[0], "dirty": dirty, "indicators": out}

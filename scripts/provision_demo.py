@@ -1,4 +1,4 @@
-"""Prepare only explicit demo grants using the existing governed ControlService.
+"""Prepare only explicit demo grants using the existing governed control plane.
 
 Run in the seed container, after the ordinary and MCP seeds. No provider/MCP
 secret is needed. A revoked setup grant is restored under a new id, as the seed
@@ -152,7 +152,9 @@ async def provision_executor_changes(service, bearer, key):
     from sre_agent.persistence.models import CredentialRow
 
     body = {"principal_id": "deploy-executor", "kind": "agent", "display_name": "Deploy executor"}
-    response = await service.create_principal(body, bearer, "setup-v1-principal-deploy-executor")
+    response = await service.principals.create_principal(
+        body, bearer, "setup-v1-principal-deploy-executor"
+    )
     if response.status_code not in (200, 201, 409):
         raise RuntimeError("deploy-executor principal conflict")
     async with service.sessions() as session, session.begin():
@@ -172,7 +174,7 @@ async def provision_executor_changes(service, bearer, key):
         elif stored.status != "active" or not verify_api_key(key, stored.key_hash):
             raise RuntimeError("deploy-executor credential conflict")
     grant = executor_changes_grant()
-    response = await service.create_grant(grant, bearer, "setup-v1-" + grant["grant_id"])
+    response = await service.grants.create_grant(grant, bearer, "setup-v1-" + grant["grant_id"])
     if not (response.status_code in (201, 409) and await _already_active(service, grant)):
         raise RuntimeError("demo grant conflict: " + grant["grant_id"])
 
@@ -227,12 +229,14 @@ async def provision_demo(service, bearer, executor_changes_key=None):
         await seed_bok_demo(session)
     for resource_id, description in SERVICE_OPERATIONS.items():
         body = service_operation(resource_id, description)
-        response = await service.create_catalog_resource(body, bearer, "setup-v1-" + resource_id)
+        response = await service.catalog.create_catalog_resource(
+            body, bearer, "setup-v1-" + resource_id
+        )
         # 409: an earlier run cataloged it. As given is convergence; anything else fails closed.
         if response.status_code not in (201, 409) or not await _cataloged(service, body):
             raise RuntimeError("operation catalog conflict: " + resource_id)
     for body in (*demo_grants(), *store_flag_grants()):
-        response = await service.create_grant(body, bearer, "setup-v1-" + body["grant_id"])
+        response = await service.grants.create_grant(body, bearer, "setup-v1-" + body["grant_id"])
         if response.status_code == 201 and await _granted(service, body):
             continue
         # The authority is active already, maybe under another id: convergence.

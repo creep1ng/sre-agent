@@ -34,7 +34,8 @@ from sre_agent.governance.authorization import (
     AuthorizationEvaluation,
     ResourceAuthorizationFact,
 )
-from sre_agent.governance.dto import Principal, PrincipalContext, ResourceType
+from sre_agent.governance.dto import Principal, PrincipalContext
+from sre_agent.governance.resources import ResourceType
 from sre_agent.incident.persistence import IncidentRecord, IncidentUnitOfWork, RunRecord
 from sre_agent.incident.projections import (
     RUN_ID_PATTERN,
@@ -164,7 +165,9 @@ async def consistent_run_state(
     raise StateReadRaceError(run_id)
 
 
-def _identifiers(incident_id: str, run_id: str | None = None) -> None:
+def check_identifiers(incident_id: str, run_id: str | None = None) -> None:
+    """Refuse an incident id, and a run id when given, that is not well formed; the incident and
+    run-context reads share it."""
     if re.fullmatch(IDENTIFIER_PATTERN, incident_id) is None:
         raise INVALID
     if run_id is not None and re.fullmatch(RUN_ID_PATTERN, run_id) is None:
@@ -250,7 +253,9 @@ class IncidentQueryService:
             except UnsupportedWorkflowDataError:
                 raise INVALID from None
 
-        return await self._read(DETAIL, authorization, lambda: _identifiers(incident_id), detail)
+        return await self._read(
+            DETAIL, authorization, lambda: check_identifiers(incident_id), detail
+        )
 
     async def get_timeline(
         self,
@@ -264,7 +269,7 @@ class IncidentQueryService:
         operation = operation or TIMELINE
 
         def page_request() -> tuple[int, int]:
-            _identifiers(incident_id, run_id)
+            check_identifiers(incident_id, run_id)
             try:
                 parsed_limit = int(limit) if limit is not None else DEFAULT_LIMIT
             except (TypeError, ValueError):
@@ -325,7 +330,7 @@ class IncidentQueryService:
                 raise INVALID from None
 
         return await self._read(
-            SNAPSHOT, authorization, lambda: _identifiers(incident_id, run_id), snapshot
+            SNAPSHOT, authorization, lambda: check_identifiers(incident_id, run_id), snapshot
         )
 
     async def get_run_state(self, incident_id: str, run_id: str, authorization: str | None) -> Response:  # fmt: skip
@@ -348,7 +353,7 @@ class IncidentQueryService:
                 raise INVALID from None
 
         return await self._read(
-            RUN_STATE, authorization, lambda: _identifiers(incident_id, run_id), run_state
+            RUN_STATE, authorization, lambda: check_identifiers(incident_id, run_id), run_state
         )
 
     async def list_incidents(

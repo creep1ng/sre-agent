@@ -11,7 +11,9 @@ so a handler that writes outside the use case it hands the gate is caught too: e
 sent before the allowed request, with its own idempotency key and a body built when it is sent,
 and the denied caller is one the use case itself would accept where one exists, so that the
 refusal would write if it ran; no refusal writes, and the allowed request then does. A route
-that audits is checked by the audit rows of each request, found by its `request_id`. With
+that audits is checked by the audit rows of each request, found by its `request_id`. The control
+plane's own wording (no challenge on its 401s but on consumption limits, refusals before
+authorization audited at stage `audit`, a denial hidden as 404) is data of its cases. With
 GATE_EVIDENCE set, every request is written there as JSON lines.
 """
 
@@ -95,8 +97,14 @@ class Case:
     effect: str | None = None
     # A refusal's own body, from the allowed body and the refusal's label.
     vary: Callable[[Any, str], Any] | None = None
-    # An invalid form of the request and the status it gets with a bad or an ungranted key.
+    # An invalid form of the request and the status it gets with a bad or an ungranted key; a
+    # `bytes` body is sent as it is, as JSON.
     invalid: tuple[str, Any, int] | None = None
+    # The challenge a 401 carries: the control plane sends none, but on consumption limits.
+    challenge: str | None = "Bearer"
+    # The stage a refusal before authorization is audited at, when not the refusal's own
+    # (`authentication`, `validation`): the control plane audits those at `audit`.
+    refused_at: str | None = None
 
 
 CHANGE = {"source": "ci", "external_id": "run-1021", "service": "checkout", "kind": "deploy"}
@@ -238,6 +246,141 @@ CASES = [
                     "end_time": "now"}, audited=True, audits_401=False,
          invalid=("/v1/mcp/tools/query_prometheus", {}, 422)),  # mcp2
 ]  # fmt: skip
+
+# The control plane: every operation of `sre_agent.control.operations`, allowed for the
+# administrator and denied to a human without its grant. Control routes audit every request,
+# refusals before authorization at stage `audit`, and send no challenge but on consumption limits;
+# the credential list hides a denial as 404. Writes target the fixture's `gate-1022-*` resources.
+TARGET = "/v1/principals/gate-1022-target"
+ALIAS = "/v1/model-aliases/gate-1022-alias"
+SKILL = "/v1/skills/gate-1022-skill/1.0.0"
+STALE = "2020-01-01T00:00:00+00:00"
+# A body nested past the JSON parser's recursion limit is invalid like any body that is not JSON.
+NESTED = b"[" * 20000 + b"]" * 20000
+
+
+def _updated(table: str, column: str, value: str) -> str:
+    query = text(f"SELECT updated_at FROM {table} WHERE {column} = :value")  # noqa: S608
+    return _sql(query, value=value)[0]["updated_at"].isoformat()
+
+
+def _named(field: str) -> Callable[[Any, str], Any]:
+    """A refusal's body naming its own resource, so it would write if it ran."""
+    return lambda body, label: body | {field: _slug(label)}
+
+
+def _control(method: str, path: str, status: int = 200, body: Any = None, **options: Any) -> Case:
+    # Every control POST is idempotent, and so is the consumption-limits PUT.
+    idempotent = method == "POST" or path == "/v1/consumption-limits"
+    options.setdefault("headers", {"Idempotency-Key": "gate-1022-request"} if idempotent else {})
+    options.setdefault("challenge", None)
+    return Case(method, path, "ADMIN_HUMAN", "DEMO_HUMAN", status, options.pop("denied", 403),
+                body, audited=True, refused_at="audit", **options)  # fmt: skip
+
+
+def _policy(facts: dict[str, Any]) -> dict[str, Any]:
+    [row] = _sql(text("SELECT version FROM consumption_limit_policies WHERE policy_id = 1"))
+    return {"expected_version": row["version"], "incident_token_limit": 1022,
+            "monthly_usd_limit": "10.22"}  # fmt: skip
+
+
+VERSION = "SELECT max(version) AS count FROM consumption_limit_policies"
+CATALOG = "SELECT count(*) FROM resources WHERE resource_id = '{}' AND status = 'inactive'"
+SERVER = {"resource_type": "mcp_server", "resource_id": "gate-1022-server",
+          "owner_id": "mcp-platform", "source": "mcp", "source_ref": "mcp-platform/gate-1022",
+          "status": "registered", "discoverability": {"display_name": "Gate server",
+          "visibility": "private", "description": "Gate.", "tags": ["mcp"]}}  # fmt: skip
+CONTROL_CASES = [
+    _control("PUT", "/v1/consumption-limits", 200, _policy, effect=VERSION, challenge="Bearer",
+             invalid=("/v1/consumption-limits", {"expected_version": -1}, 422)),
+    _control("GET", "/v1/consumption-limits", challenge="Bearer"),
+    _control("POST", "/v1/principals", 201,
+             {"principal_id": "gate-1022-new", "kind": "agent", "display_name": "New"},
+             effect="SELECT count(*) FROM principals", vary=_named("principal_id"),
+             invalid=("/v1/principals", {}, 422)),
+    _control("GET", "/v1/principals", invalid=("/v1/principals?limit=0", None, 422)),
+    _control("GET", TARGET, invalid=("/v1/principals/X!", None, 422)),
+    _control("PUT", "/v1/principals/gate-1022-status/status", 200,
+             lambda facts: {"status": "inactive", "expected_updated_at":
+                            _updated("principals", "principal_id", "gate-1022-status")},
+             effect="SELECT count(*) FROM principals WHERE status = 'inactive'",
+             invalid=("/v1/principals/gate-1022-status/status", {"status": "gone"}, 422)),
+    _control("POST", TARGET + "/credentials", 201, {},
+             effect="SELECT count(*) FROM credentials",
+             invalid=(TARGET + "/credentials", {"expires_at": "soon"}, 422)),
+    _control("GET", TARGET + "/credentials", denied=404,
+             invalid=(TARGET + "/credentials?limit=500", None, 422)),
+    _control("DELETE", "/v1/credentials/{credential}", 204,
+             effect="SELECT count(*) FROM credentials WHERE status = 'revoked'",
+             invalid=("/v1/credentials/X!", None, 422)),
+    _control("POST", "/v1/credentials/{rotating}/rotation", 201, {},
+             effect="SELECT count(*) FROM credentials",
+             invalid=("/v1/credentials/{rotating}/rotation", {"expires_at": 3}, 422)),
+    # The grant goes to the fixture's principal, so no case's denied caller gains it.
+    _control("POST", "/v1/grants", 201,
+             {"grant_id": "gate-1022-grant", "principal_id": "gate-1022-target",
+              "action": "admin.read", "effect": "allow",
+              "resource": {"resource_type": "administrative_control", "resource_id": "grants"}},
+             effect="SELECT count(*) FROM grants", vary=_named("grant_id"),
+             invalid=("/v1/grants", NESTED, 422)),
+    _control("GET", "/v1/grants?principal_id=gate-1022-target",
+             invalid=("/v1/grants", None, 422)),
+    _control("DELETE", "/v1/grants/{grant}", 204,
+             effect="SELECT count(*) FROM grants WHERE status = 'revoked'",
+             invalid=("/v1/grants/X!", None, 422)),
+    _control("POST", "/v1/model-aliases", 201,
+             {"model_alias_id": "gate-1022-new", "alias": "gate-1022-new",
+              "concrete_model": "openai/gpt-4o-mini", "router": "openrouter",
+              "inference_provider": "openai"},
+             effect="SELECT count(*) FROM resources", vary=lambda body, label: body | {
+                 "model_alias_id": _slug(label), "alias": _slug(label)},
+             invalid=("/v1/model-aliases", {"model_alias_id": "x"}, 422)),
+    _control("GET", "/v1/model-aliases", invalid=("/v1/model-aliases?limit=x", None, 422)),
+    _control("GET", ALIAS, invalid=("/v1/model-aliases/X!", None, 422)),
+    _control("PUT", ALIAS + "/assignment", 200,
+             lambda facts: {"concrete_model": "openai/gpt-4o", "router": "openrouter",
+                            "inference_provider": "openai", "expected_updated_at":
+                            _updated("resources", "resource_id", "gate-1022-alias")},
+             effect="SELECT count(*) FROM resources WHERE concrete_model = "
+                                "'openai/gpt-4o' AND resource_id = 'gate-1022-alias'",
+             invalid=(ALIAS + "/assignment", {"concrete_model": "openai/gpt-4o"}, 422)),
+    _control("PUT", ALIAS + "/status", 200,
+             lambda facts: {"status": "inactive", "expected_updated_at":
+                            _updated("resources", "resource_id", "gate-1022-alias")},
+             effect=CATALOG.format("gate-1022-alias"),
+             invalid=(ALIAS + "/status", {"status": "gone"}, 422)),
+    _control("POST", "/v1/catalog/resources", 201, SERVER,
+             effect="SELECT count(*) FROM resources", vary=lambda body, label: body | {
+                 "resource_id": _slug(label), "source_ref": "mcp-platform/" + _slug(label)},
+             invalid=("/v1/catalog/resources", {"resource_type": "mcp_server"}, 422)),
+    _control("GET", "/v1/catalog/resources",
+             invalid=("/v1/catalog/resources?resource_type=nope", None, 422)),
+    _control("GET", "/v1/catalog/resources/skill/gate-1022-skill@1.0.0",
+             invalid=("/v1/catalog/resources/nope/x", None, 422)),
+    _control("POST", "/v1/skills/versions", 201,
+             {"skill_id": "gate-1022-new", "version": "1.0.0", "owner_id": "demo-human",
+              "manifest": {"display_name": "New", "description": "A gate fixture.",
+                           "instructions": "Read the gate.", "dependencies": []}},
+             effect="SELECT count(*) FROM skill_versions", vary=_named("skill_id"),
+             invalid=("/v1/skills/versions", {"skill_id": "X"}, 422)),
+    _control("GET", SKILL, invalid=("/v1/skills/X/1.0.0", None, 422)),
+    _control("PUT", SKILL + "/status", 200,
+             lambda facts: {"status": "inactive", "expected_updated_at":
+                            _updated("resources", "resource_id", "gate-1022-skill@1.0.0")},
+             effect=CATALOG.format("gate-1022-skill@1.0.0"),
+             invalid=(SKILL + "/status", {"status": "draft"}, 422)),
+    _control("GET", SKILL + "/status", invalid=("/v1/skills/X/1.0.0/status", None, 422)),
+    _control("POST", "/v1/bok/collections/versions", 201,
+             {"collection_id": "gate-1022-new", "version": "1.0.0", "display_name": "New",
+              "description": "Gate.", "documents": [{"document_id": "doc-1", "title": "Doc",
+              "source_ref": "https://example.invalid/d", "chunks": [{"section_id": "steps",
+              "chunk_index": 0, "content": "Rotate."}]}]},
+             effect="SELECT count(*) FROM bok_collection_versions", vary=_named("collection_id"),
+             invalid=("/v1/bok/collections/versions", {"collection_id": "x"}, 422)),
+    _control("GET", "/v1/bok/collections/otel-demo-store/versions/1.0.0",
+             invalid=("/v1/bok/collections/X/versions/1.0.0", None, 422)),
+]  # fmt: skip
+CASES += CONTROL_CASES
 
 
 class Provider:
@@ -402,7 +545,45 @@ def facts(client: TestClient) -> dict[str, Any]:
     facts["mitigating"] = "inc-gate-mitigating"
     pending = {"status": "awaiting_human", "pending_command": "approve_mitigation"}
     facts["approving"] = _seed(facts["mitigating"], "mitigating", pending)
-    return facts
+    return facts | _control_facts(client)
+
+
+def _control_facts(client: TestClient) -> dict[str, Any]:
+    """What the control cases act on: two principals, two credentials of the first (one to
+    revoke, one to rotate), a grant to revoke, a model alias and an active skill."""
+    admin = {"Authorization": "Bearer " + KEYS["ADMIN_HUMAN"]}
+
+    def create(path: str, body: dict[str, Any], key: str) -> dict[str, Any]:
+        created = client.post(path, json=body, headers=admin | {"Idempotency-Key": key})
+        assert created.status_code == 201, created.text
+        return created.json()
+
+    for principal in ("gate-1022-target", "gate-1022-status"):
+        create("/v1/principals", {"principal_id": principal, "kind": "human",
+                                  "display_name": "Gate"}, f"{principal}-create")  # fmt: skip
+    credentials = [
+        create(TARGET + "/credentials", {}, f"gate-1022-credential-{n}")["credential"]
+        for n in (1, 2)
+    ]
+    grant = {"grant_id": "gate-1022-revoked", "principal_id": "gate-1022-target",
+             "action": "admin.read", "effect": "allow",
+             "resource": {"resource_type": "administrative_control",
+                          "resource_id": "principals"}}  # fmt: skip
+    create("/v1/grants", grant, "gate-1022-grant-create")
+    alias = {"model_alias_id": "gate-1022-alias", "alias": "gate-1022-alias",
+             "concrete_model": "openai/gpt-4o-mini", "router": "openrouter",
+             "inference_provider": "openai"}  # fmt: skip
+    create("/v1/model-aliases", alias, "gate-1022-alias-create")
+    skill = {"skill_id": "gate-1022-skill", "version": "1.0.0", "owner_id": "demo-human",
+             "manifest": {"display_name": "Gate", "description": "A gate fixture.",
+                          "instructions": "Read the gate.", "dependencies": []}}  # fmt: skip
+    create("/v1/skills/versions", skill, "gate-1022-skill-create")
+    _sql(text("UPDATE resources SET status = 'active' WHERE resource_id = 'gate-1022-skill@1.0.0'"))
+    return {
+        "credential": credentials[0]["credential_id"],
+        "rotating": credentials[1]["credential_id"],
+        "grant": grant["grant_id"],
+    }
 
 
 def _slug(label: str) -> str:
@@ -439,9 +620,15 @@ def test_route_refuses_before_its_use_case_and_audits_where_it_audits(
         if label != "allowed" and "Idempotency-Key" in headers:
             headers["Idempotency-Key"] += "-" + _slug(label)
         before, written = len(admitted), _count(case.effect)
-        response = client.request(case.method, url, headers=headers, json=body)
-        assert response.headers["content-type"].startswith("application/json"), response.text
-        answer = response.json()
+        if isinstance(body, bytes):
+            headers["Content-Type"] = "application/json"
+            response = client.request(case.method, url, headers=headers, content=body)
+        else:
+            response = client.request(case.method, url, headers=headers, json=body)
+        answer = None
+        if response.status_code != 204:
+            assert response.headers["content-type"].startswith("application/json"), response.text
+            answer = response.json()
         request_id = answer.get("request_id") if isinstance(answer, dict) else None
         if request_id is None and len(admitted) > before:
             request_id = str(admitted[-1].request_id)
@@ -480,13 +667,13 @@ def test_route_refuses_before_its_use_case_and_audits_where_it_audits(
         assert set(refused.json()) == {"error", "request_id", "retryable"}
         assert not effect, f"{label}: the request wrote"
         if status == 401:
-            assert refused.headers["www-authenticate"] == "Bearer"
+            assert refused.headers.get("www-authenticate") == case.challenge
         if case.audited and label == "denied":
             assert [(row["stage"], row["outcome"]) for row in audit] == [
                 ("authorization", "denied")
             ], audit
         if case.audited and status == 401:
-            expected = [("authentication", 401)] if case.audits_401 else []
+            expected = [(case.refused_at or "authentication", 401)] if case.audits_401 else []
             assert [(row["stage"], row["response_status"]) for row in audit] == expected, audit
 
     if case.invalid is not None:
@@ -498,7 +685,8 @@ def test_route_refuses_before_its_use_case_and_audits_where_it_audits(
             assert refused.status_code == status, (label, refused.text)
             assert not effect, f"{label}: the request wrote"
             if case.audited:
-                expected = [("validation", status)] if case.audits_invalid else []
+                stage = case.refused_at or "validation"
+                expected = [(stage, status)] if case.audits_invalid else []
                 assert [(row["stage"], row["response_status"]) for row in audit] == expected, audit
 
     principal = {"principal": case.allowed.lower().replace("_", "-")}
@@ -518,7 +706,7 @@ def test_route_refuses_before_its_use_case_and_audits_where_it_audits(
     assert inactive.status_code == 401 and not effect
     if case.audited:
         assert [(row["stage"], row["response_status"]) for row in audit] == [
-            ("authentication", 401)
+            (case.refused_at or "authentication", 401)
         ], audit
 
     allowed, effect, audit = send("allowed", path, body("allowed"), "Bearer " + KEYS[case.allowed])

@@ -31,11 +31,7 @@ from sre_agent.gateway.mcp import (
     MCPUpstreamClient,
     mcp_router,
 )
-from sre_agent.control.service import ControlService, control_router
-from sre_agent.control.consumption_limits import (
-    ConsumptionLimitPolicyService,
-    consumption_limits_router,
-)
+from sre_agent.control.plane import ControlPlane
 from sre_agent.gateway.responses import AuditStore, PostgresAuditStore, ResponsesService, responses_router  # noqa: E501  # fmt: skip
 from sre_agent.gateway.incidents import IncidentQueryService, incident_router
 from sre_agent.gateway.action_catalog import ActionCatalogService, action_catalog_router
@@ -223,14 +219,8 @@ def create_application(
                 )
             )
         )
-        application.include_router(
-            consumption_limits_router(
-                ConsumptionLimitPolicyService(database.sessions, store, projector)
-            )
-        )
-        application.include_router(
-            control_router(ControlService(database.sessions, store, projector))
-        )
+        for router in ControlPlane(database.sessions, store, projector).routers():
+            application.include_router(router)
         application.include_router(
             skill_resolution_router(SkillResolutionService(database.sessions, store, projector))
         )

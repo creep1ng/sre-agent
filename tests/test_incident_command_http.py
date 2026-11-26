@@ -114,7 +114,7 @@ def authorized_database(migrated_database: None) -> None:
             ("approving-harness", "run.approve"),
         ):
             grant_id = f"grant-{principal}-{action.replace('.', '-')}-incident-response"
-            created = await control.create_grant(
+            created = await control.grants.create_grant(
                 {
                     "grant_id": grant_id,
                     "principal_id": principal,

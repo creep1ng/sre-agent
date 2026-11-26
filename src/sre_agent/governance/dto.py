@@ -5,24 +5,20 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from sre_agent.governance.resources import (
+    CATALOG_SOURCE,
+    CATALOG_STATES,
+    CatalogResourceType,
+    CatalogSource,
+    CatalogStatus,
+    CatalogVisibility,
+    ResourceType,
+)
 from sre_agent.vocabulary import Identifier
 
-ResourceType = Literal[
-    "llm_model",
-    "mcp_server",
-    "mcp_tool",
-    "skill",
-    "bok_collection",
-    "administrative_control",
-    # Approved extension (agent/api/authorization.v1.yaml): the incident workflow
-    # is the stable grantable resource for run-scoped incident actions. Grants over
-    # this type are contracted but not seeded; evaluation denies by default.
-    "incident_workflow",
-    # What mitigation.execute grants are over (#722): `{service}:{operation}` of an operation
-    # the deploy-executor enrols (schemas/executor/1.0.0/deploy-executor.yaml, `governance`).
-    "service_operation",
-]
 ControlAction = Literal["admin.read", "admin.write"]
+
+
 AuditRefValue = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 ReasonCode = Literal[
     "audit_unavailable",
@@ -109,22 +105,6 @@ class Grant(StrictDTO):
     created_at: AwareDatetime
 
 
-CatalogResourceType = Literal[
-    "llm_model",
-    "mcp_server",
-    "mcp_tool",
-    "skill",
-    "bok_collection",
-    "incident_workflow",
-    "service_operation",
-]
-CatalogSource = Literal[
-    "model_alias", "mcp", "skill", "bok", "incident_workflow", "deploy_executor"
-]
-CatalogStatus = Literal[
-    "registered", "draft", "published", "indexing", "active", "inactive", "revoked"
-]
-CatalogVisibility = Literal["public", "private", "hidden"]
 CatalogId = Annotated[
     str, Field(min_length=1, max_length=200, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$")
 ]
@@ -205,27 +185,9 @@ class ResourceCatalogEntry(StrictDTO):
 
     @model_validator(mode="after")
     def validate_owner_source_status(self) -> "ResourceCatalogEntry":
-        expected_source: dict[str, str] = {
-            "llm_model": "model_alias",
-            "mcp_server": "mcp",
-            "mcp_tool": "mcp",
-            "skill": "skill",
-            "bok_collection": "bok",
-            "incident_workflow": "incident_workflow",
-            "service_operation": "deploy_executor",
-        }
-        if self.source != expected_source[self.resource_type]:
+        if self.source != CATALOG_SOURCE[self.resource_type]:
             raise ValueError("catalog source does not match resource type")
-        allowed: dict[str, set[str]] = {
-            "llm_model": {"active", "inactive"},
-            "mcp_server": {"registered", "active", "inactive", "revoked"},
-            "mcp_tool": {"registered", "active", "inactive", "revoked"},
-            "skill": {"draft", "published", "active", "inactive", "revoked"},
-            "bok_collection": {"draft", "indexing", "active", "inactive", "revoked"},
-            "incident_workflow": {"active", "inactive"},
-            "service_operation": {"active", "inactive"},
-        }
-        if self.status not in allowed[self.resource_type]:
+        if self.status not in CATALOG_STATES[self.resource_type]:
             raise ValueError("catalog status is not permitted for this resource type")
         if len(set(self.discoverability.tags)) != len(self.discoverability.tags):
             raise ValueError("catalog tags must be unique")

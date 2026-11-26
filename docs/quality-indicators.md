@@ -1,7 +1,7 @@
 # Code-quality indicators (EP-14)
 
 Epic #1015 states its progress with the indicators I01–I35, and a story that declares one
-outside them adds it to the script with its row here (#1025 added I36 and I37).
+outside them adds it to the script with its row here (#1025 added I36 and I37, #1022 I38).
 `scripts/quality_indicators.py` measures them on a full git checkout; this page records each definition, its baseline on `main`
 at `0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63`, its target and the issue that moves it. An
 indicator is evidence for a reviewer, not a goal in itself: a value reached by one of the routes
@@ -124,17 +124,17 @@ include blank lines, comments and docstrings.
 | I35 `store.ts` lines / `scenarios.ts` in `src/lib` | Newlines in `web/incident-console/src/lib/store.ts`; whether `src/lib/scenarios.ts` exists | None known | Moving the simulator to another bundled path (I36 catches it) | 776 / True | ≤ 300 / False | #1025 |
 | I36 `scenarios.ts` strings in the console bundle | Double-quoted literals of 20 or more characters without escapes, outside comments and template literals, in the tracked `web/incident-console/src/**/scenarios.ts`, and how many of them appear in `web/incident-console/dist/**/*.js` once `\u`/`\x` escapes are decoded; `not measured` without a build | A long literal that another module also bundles; a `dist` left from another commit or built with `CONSOLE_SIMULATOR=1` | Building the scripts' texts by concatenation or template literals, which are not counted | 162 of 162 | 0 of N in a build without `CONSOLE_SIMULATOR` | #1025 |
 | I37 busy/error pairs in administration pages | Per tracked `web/incident-console/src/features/admin/*-page.tsx`, the smaller of its `const [busy, setBusy] = useState` and `const [error, setError] = useState` counts, summed | A page whose busy flag is not a form's write | Renaming the state, or a per-page hook that repeats the same pair | 13 | 0 | #1025 |
+| I38 declarations of the catalog resource types in src | Each literal collection, `Literal[...]`, dict's keys or SQL string in `src/` that names all seven catalog types (`llm_model`, `mcp_server`, `mcp_tool`, `skill`, `bok_collection`, `incident_workflow`, `service_operation`), each one counted, several in one file included; the release schemas, which publish the same vocabulary, are outside `src/` and not counted | Collections derived from a declaration (a comprehension, `get_args`) | Splitting a declaration across two collections; building the names by concatenation | 10 on `624bb824`, in 4 files (the issue counted 5 files, the release schemas included) | 1, plus the CHECK constraints derived from it | #1022 |
 
 Adding this page and the script raised I23 and I26 by one each over the baseline, I20 by three
 files (those two and `docker/quality.Dockerfile`) and I21 by two (both mention `grant`).
 
 ## Indicators the script does not measure
 
-Two stories declare indicators outside I01–I35 that the script does not measure yet; the PR of
+One story declares indicators outside I01–I38 that the script does not measure yet; the PR of
 the owning story adds each one to the script and moves its row to the table above.
 
 | Indicator | Baseline | Target | Issue |
 | --- | --- | --- | --- |
-| Places that declare the catalog's resource types | 5 | 1, plus the CHECK constraints derived from it | #1022 |
 | Core packages covered by `.importlinter` | `incident`, `governance`, `investigator`, `executor` | also `triage`, `chat`, `bok` and the application | #1023 |
 | `os.environ` reads outside the settings | 7 | 0 | #1023 |

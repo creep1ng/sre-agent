@@ -16,7 +16,7 @@ from referencing.jsonschema import DRAFT202012
 from sqlalchemy.exc import StatementError
 
 from sre_agent.application import create_application
-from sre_agent.control.service import RotationIssuanceFailure
+from sre_agent.control.credentials import RotationIssuanceFailure
 from sre_agent.governance.authorization import AuthorizationDecisionEngine
 from sre_agent.governance.dto import SkillManifest
 from sre_agent.persistence.database import Database
@@ -344,9 +344,10 @@ def test_consumption_policy_put_is_guarded_idempotent_versioned_and_persists(
     }
     key = "consumption-policy-write-0001"
 
-    unauthenticated = client.put(path, json=payload)
+    unauthenticated = client.put(path, json=payload, headers={"Idempotency-Key": key})
     assert unauthenticated.status_code == 401, unauthenticated.text
-    assert client.put(path, json=payload, headers=headers(RESTRICTED_KEY)).status_code == 403
+    restricted = headers(RESTRICTED_KEY, idempotency_key=key)
+    assert client.put(path, json=payload, headers=restricted).status_code == 403
     assert client.put(path, json=payload, headers=headers()).status_code == 400
 
     updated = client.put(path, json=payload, headers=headers(idempotency_key=key))
@@ -698,9 +699,12 @@ def test_conflict_inactive_auth_and_hidden_denial_audit(
         == 200
     )
     inactive_denial = client.get("/v1/principals", headers=headers(issued["key"]))
-    assert inactive_denial.status_code == 403
-    inactive_cause, *_ = audit_row(inactive_denial.json()["request_id"])
-    assert inactive_cause == "principal_inactive"
+    assert inactive_denial.status_code == 401
+    assert inactive_denial.json()["error"]["code"] == "authentication_failed"
+    inactive_cause, inactive_status, inactive_identity, *_ = audit_row(
+        inactive_denial.json()["request_id"]
+    )
+    assert (inactive_cause, inactive_status, inactive_identity) == (None, 401, None)
 
     denied_existing = client.get("/v1/principals/admin-human", headers=headers(RESTRICTED_KEY))
     denied_missing = client.get("/v1/principals/not-present-human", headers=headers(RESTRICTED_KEY))
@@ -1606,7 +1610,8 @@ def test_alias_assignment_replace_is_guarded_replay_safe_and_metadata_only(
     token = stored["updated_at"]
     path = "/v1/model-aliases/t5-assignment/assignment"
 
-    assert client.put(path, json=assignment_payload()).status_code == 401
+    unauthenticated = {**assignment_payload(), "expected_updated_at": token}
+    assert client.put(path, json=unauthenticated).status_code == 401
     denied = client.put(
         path,
         json={**assignment_payload(), "expected_updated_at": token},

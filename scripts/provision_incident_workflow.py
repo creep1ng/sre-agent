@@ -95,11 +95,11 @@ class ProvisionResult:
 
 
 def build_service(database, audit_key: bytes):
-    from sre_agent.control.service import ControlService
+    from sre_agent.control.plane import ControlPlane
     from sre_agent.gateway.audit import AuditProjector
     from sre_agent.gateway.responses import PostgresAuditStore
 
-    return ControlService(
+    return ControlPlane(
         database.sessions, PostgresAuditStore(database.sessions), AuditProjector(audit_key)
     )
 
@@ -124,11 +124,17 @@ async def _granted(service, body: dict) -> bool:
 
 
 async def provision(service, bearer: str) -> ProvisionResult:
-    catalog = await service.create_catalog_resource(CATALOG_BODY, bearer, CATALOG_IDEMPOTENCY_KEY)
-    grant = await service.create_grant(GRANT_BODY, bearer, GRANT_IDEMPOTENCY_KEY)
-    start = await service.create_grant(START_GRANT_BODY, bearer, START_GRANT_IDEMPOTENCY_KEY)
-    sender = await service.create_grant(COMMAND_GRANT_BODY, bearer, COMMAND_GRANT_IDEMPOTENCY_KEY)
-    approver = await service.create_grant(APPROVE_GRANT_BODY, bearer, APPROVE_GRANT_IDEMPOTENCY_KEY)
+    catalog = await service.catalog.create_catalog_resource(
+        CATALOG_BODY, bearer, CATALOG_IDEMPOTENCY_KEY
+    )
+    grant = await service.grants.create_grant(GRANT_BODY, bearer, GRANT_IDEMPOTENCY_KEY)
+    start = await service.grants.create_grant(START_GRANT_BODY, bearer, START_GRANT_IDEMPOTENCY_KEY)
+    sender = await service.grants.create_grant(
+        COMMAND_GRANT_BODY, bearer, COMMAND_GRANT_IDEMPOTENCY_KEY
+    )
+    approver = await service.grants.create_grant(
+        APPROVE_GRANT_BODY, bearer, APPROVE_GRANT_IDEMPOTENCY_KEY
+    )
     return ProvisionResult(
         catalog.status_code,
         grant.status_code,
@@ -143,7 +149,7 @@ async def provision(service, bearer: str) -> ProvisionResult:
 
 
 async def revoke_run_read(service, bearer: str) -> int:
-    response = await service.revoke_grant(GRANT_BODY["grant_id"], bearer)
+    response = await service.grants.revoke_grant(GRANT_BODY["grant_id"], bearer)
     return response.status_code
 
 

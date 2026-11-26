@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+from pydantic import ValidationError
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from sqlalchemy.exc import IntegrityError
@@ -24,6 +25,7 @@ from sre_agent.governance.dto import (
     SkillManifest,
     SkillVersionRecord,
 )
+from sre_agent.governance.resources import CATALOG_TYPES
 from sre_agent.persistence.api_keys import (
     api_key_prefix,
     candidate_prefixes,
@@ -298,6 +300,17 @@ class IdempotencyBinding:
     replayed: bool
 
 
+class GrantConflictError(RuntimeError):
+    """A new grant repeats an existing one: its `grant_id` (active or revoked), or the active
+    grant with the same principal, action and resource; None when the database did not say."""
+
+    REPEATS = {"grants_pkey": "grant_id", "uq_grants_active_direct": "active_grant"}
+
+    def __init__(self, repeats: str | None) -> None:
+        super().__init__(repeats or "grant")
+        self.repeats = repeats
+
+
 class IdempotencyConflictError(RuntimeError):
     """The retained key binding conflicts with the request payload hash."""
 
@@ -528,13 +541,13 @@ class ModelAliasRepository:
         router: str,
         inference_provider: str,
         *,
+        owner_id: str,
+        source_ref: str,
+        display_name: str,
+        visibility: str,
+        description: str,
+        tags: list[str],
         now: datetime | None = None,
-        owner_id: str | None = None,
-        source_ref: str | None = None,
-        display_name: str | None = None,
-        visibility: str | None = None,
-        description: str | None = None,
-        tags: list[str] | None = None,
     ) -> ModelAlias:
         issued_at = now or datetime.now(UTC)
         row = ResourceRow(
@@ -547,13 +560,13 @@ class ModelAliasRepository:
             concrete_model=concrete_model,
             router=router,
             inference_provider=inference_provider,
-            owner_id=owner_id if owner_id is not None else model_alias_id,
+            owner_id=owner_id,
             source="model_alias",
-            source_ref=source_ref if source_ref is not None else model_alias_id,
-            display_name=display_name if display_name is not None else alias,
-            visibility=visibility if visibility is not None else "private",
-            description=description if description is not None else "",
-            tags=list(tags) if tags is not None else [],
+            source_ref=source_ref,
+            display_name=display_name,
+            visibility=visibility,
+            description=description,
+            tags=list(tags),
         )
         self._session.add(row)
         await self._session.flush()
@@ -658,24 +671,23 @@ class ModelAliasRepository:
         raise StaleWriteError(model_alias_id)
 
 
+# What projecting a stored catalog row can raise: `ValidationError` for a value the catalog model
+# rejects, and `TypeError` from `list(row.tags)` when the JSONB `tags` holds a number or a boolean
+# (no CHECK constrains its type). Reads skip such a row (a list leaves it out, a read finds none).
+_UNREADABLE_CATALOG_ROW = (ValidationError, TypeError)
+
+
 class CatalogRepository:
     """Closed owner-backed catalog reads and admin creates over resource rows.
 
     Only catalog resource types enumerate here; administrative_control never
-    does. Hidden and inactive entries never enumerate in lists and read as
-    the safe 404; revoked and other lifecycle states remain discoverable.
-    The projection never leaks ModelAlias routing or secrets.
+    does, and a row that does not project as a catalog entry reads as absent.
+    Which visibilities and states a caller may find is the use case's
+    decision (`control/catalog.py`). The projection never leaks ModelAlias
+    routing or secrets.
     """
 
-    CATALOG_TYPES = (
-        "llm_model",
-        "mcp_server",
-        "mcp_tool",
-        "skill",
-        "bok_collection",
-        "incident_workflow",
-        "service_operation",
-    )
+    CATALOG_TYPES = CATALOG_TYPES
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -724,7 +736,7 @@ class CatalogRepository:
             return None
         try:
             return project_catalog_entry(row)
-        except Exception:
+        except _UNREADABLE_CATALOG_ROW:
             return None
 
     async def list(
@@ -734,13 +746,13 @@ class CatalogRepository:
         owner_id: str | None = None,
         status: str | None = None,
         visibility: str | None = None,
+        excluding: dict[str, tuple[str, ...]] | None = None,
         limit: int,
     ) -> tuple[list[ResourceCatalogEntry], bool]:
-        statement = select(ResourceRow).where(
-            ResourceRow.resource_type.in_(self.CATALOG_TYPES),
-            ResourceRow.visibility != "hidden",
-            ResourceRow.status != "inactive",
-        )
+        """`excluding` names, per column (`visibility`, `status`), the values a list leaves out."""
+        statement = select(ResourceRow).where(ResourceRow.resource_type.in_(self.CATALOG_TYPES))
+        for column, values in (excluding or {}).items():
+            statement = statement.where(getattr(ResourceRow, column).not_in(values))
         if resource_type is not None:
             statement = statement.where(ResourceRow.resource_type == resource_type)
         if owner_id is not None:
@@ -748,8 +760,6 @@ class CatalogRepository:
         if status is not None:
             statement = statement.where(ResourceRow.status == status)
         if visibility is not None:
-            if visibility == "hidden":
-                return [], False
             statement = statement.where(ResourceRow.visibility == visibility)
         rows = (
             await self._session.scalars(
@@ -763,7 +773,7 @@ class CatalogRepository:
         for row in rows[:limit]:
             try:
                 items.append(project_catalog_entry(row))
-            except Exception:
+            except _UNREADABLE_CATALOG_ROW:
                 continue
         return items, truncated
 
@@ -1007,7 +1017,12 @@ class GrantRepository:
             created_at=now or datetime.now(UTC),
         )
         self._session.add(row)
-        await self._session.flush()
+        try:
+            await self._session.flush()
+        except IntegrityError as error:
+            diagnostic = getattr(error.orig, "diag", None)
+            constraint = getattr(diagnostic, "constraint_name", None)
+            raise GrantConflictError(GrantConflictError.REPEATS.get(constraint or "")) from error
         return self._project(row)
 
     async def list_filtered(

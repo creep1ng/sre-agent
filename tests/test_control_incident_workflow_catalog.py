@@ -9,7 +9,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from sre_agent.control.service import CatalogCreate
+from sre_agent.control.catalog import CatalogCreate
 from sre_agent.governance.authorization import (
     AuthorizationDecisionEngine,
     AuthorizationDenialCause,

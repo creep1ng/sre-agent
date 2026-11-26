@@ -14,6 +14,8 @@ dependencies = [
   "psycopg[binary]==3.2.6",
   "pyyaml==6.0.3",
   "sqlalchemy==2.0.52",
+  # gate/pipeline.py: a TypeVar with a default (PEP 696) is in `typing` only from 3.13.
+  "typing-extensions==4.16.0",
   "uvicorn[standard]==0.34.2",
 ]
 

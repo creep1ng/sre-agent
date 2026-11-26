@@ -3,16 +3,30 @@
 import asyncio
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from unittest.mock import ANY, AsyncMock
+from unittest.mock import AsyncMock
 
 import pytest
-from control_testkit import _Audit, _TargetAccessed
+from control_testkit import _Audit, _refuse_repositories
 
-from sre_agent.control.scopes import CONTROL_SCOPES
-from sre_agent.control.service import ControlService
+from sre_agent.control.aliases import AliasRoutes
+from sre_agent.control.catalog import CatalogRoutes
+from sre_agent.control.credentials import CredentialRoutes
+from sre_agent.control.grants import GrantRoutes
+from sre_agent.control.operations import CONTROL_SCOPES
+from sre_agent.control.principals import PrincipalRoutes
+from sre_agent.gate.pipeline import Gate, Scope
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.governance.authorization import AuthorizationDenialCause, AuthorizationEvaluation
 from sre_agent.governance.dto import PolicyDecision, Principal, PrincipalContext
+
+REPOSITORIES = (
+    "PrincipalRepository",
+    "CredentialRepository",
+    "GrantRepository",
+    "IdempotencyRepository",
+    "ModelAliasRepository",
+    "CatalogRepository",
+)
 
 
 def _context() -> PrincipalContext:
@@ -31,12 +45,15 @@ def _context() -> PrincipalContext:
     )
 
 
+# Every control operation is served on the gate by the routes of its resource module,
+# authenticated and authorized by the gate (`active_principal`, `Gate.authorize`).
 @pytest.mark.parametrize(
-    ("operation", "invoke", "expected_status"),
+    ("routes_of", "operation", "invoke", "expected_status"),
     [
         (
+            PrincipalRoutes,
             ("POST", "/v1/principals"),
-            lambda service: service.create_principal(
+            lambda routes: routes.create_principal(
                 {"principal_id": "target-human", "kind": "human", "display_name": "Target"},
                 "Bearer safe-key",
                 "create-target-human",
@@ -44,18 +61,21 @@ def _context() -> PrincipalContext:
             403,
         ),
         (
+            PrincipalRoutes,
             ("GET", "/v1/principals"),
-            lambda service: service.list_principals("Bearer safe-key", "100", {}),
+            lambda routes: routes.list_principals("Bearer safe-key", "100", {}),
             403,
         ),
         (
+            PrincipalRoutes,
             ("GET", "/v1/principals/{id}"),
-            lambda service: service.get_principal("target-human", "Bearer safe-key"),
+            lambda routes: routes.get_principal("target-human", "Bearer safe-key"),
             403,
         ),
         (
+            PrincipalRoutes,
             ("PUT", "/v1/principals/{id}/status"),
-            lambda service: service.replace_principal_status(
+            lambda routes: routes.replace_principal_status(
                 "target-human",
                 {"status": "inactive", "expected_updated_at": "2026-09-07T00:00:00Z"},
                 "Bearer safe-key",
@@ -63,8 +83,9 @@ def _context() -> PrincipalContext:
             403,
         ),
         (
+            CredentialRoutes,
             ("POST", "/v1/principals/{id}/credentials"),
-            lambda service: service.issue_credential(
+            lambda routes: routes.issue_credential(
                 "target-human",
                 {},
                 "Bearer safe-key",
@@ -73,18 +94,21 @@ def _context() -> PrincipalContext:
             403,
         ),
         (
+            CredentialRoutes,
             ("GET", "/v1/principals/{id}/credentials"),
-            lambda service: service.list_credentials("target-human", "Bearer safe-key", "100", {}),
+            lambda routes: routes.list_credentials("target-human", "Bearer safe-key", "100", {}),
             404,
         ),
         (
+            CredentialRoutes,
             ("DELETE", "/v1/credentials/{id}"),
-            lambda service: service.revoke_credential("credential-target-human", "Bearer safe-key"),
+            lambda routes: routes.revoke_credential("credential-target-human", "Bearer safe-key"),
             403,
         ),
         (
+            CredentialRoutes,
             ("POST", "/v1/credentials/{id}/rotation"),
-            lambda service: service.rotate_credential(
+            lambda routes: routes.rotate_credential(
                 "credential-target-human",
                 {},
                 "Bearer safe-key",
@@ -93,8 +117,9 @@ def _context() -> PrincipalContext:
             403,
         ),
         (
+            GrantRoutes,
             ("POST", "/v1/grants"),
-            lambda service: service.create_grant(
+            lambda routes: routes.create_grant(
                 {
                     "grant_id": "grant-target-human",
                     "principal_id": "target-human",
@@ -108,18 +133,21 @@ def _context() -> PrincipalContext:
             403,
         ),
         (
+            GrantRoutes,
             ("GET", "/v1/grants"),
-            lambda service: service.list_grants("Bearer safe-key", "target-human", None, "100", {}),
+            lambda routes: routes.list_grants("Bearer safe-key", "target-human", None, "100", {}),
             403,
         ),
         (
+            GrantRoutes,
             ("DELETE", "/v1/grants/{id}"),
-            lambda service: service.revoke_grant("grant-target-human", "Bearer safe-key"),
+            lambda routes: routes.revoke_grant("grant-target-human", "Bearer safe-key"),
             403,
         ),
         (
+            AliasRoutes,
             ("POST", "/v1/model-aliases"),
-            lambda service: service.create_alias(
+            lambda routes: routes.create_alias(
                 {
                     "model_alias_id": "target-alias",
                     "alias": "target-alias",
@@ -133,18 +161,21 @@ def _context() -> PrincipalContext:
             403,
         ),
         (
+            AliasRoutes,
             ("GET", "/v1/model-aliases"),
-            lambda service: service.list_aliases("Bearer safe-key", "100", {}),
+            lambda routes: routes.list_aliases("Bearer safe-key", "100", {}),
             403,
         ),
         (
+            AliasRoutes,
             ("GET", "/v1/model-aliases/{id}"),
-            lambda service: service.get_alias("target-alias", "Bearer safe-key"),
+            lambda routes: routes.get_alias("target-alias", "Bearer safe-key"),
             403,
         ),
         (
+            AliasRoutes,
             ("PUT", "/v1/model-aliases/{id}/assignment"),
-            lambda service: service.replace_alias_assignment(
+            lambda routes: routes.replace_alias_assignment(
                 "target-alias",
                 {
                     "concrete_model": "openai/gpt-4o-mini",
@@ -157,8 +188,9 @@ def _context() -> PrincipalContext:
             403,
         ),
         (
+            AliasRoutes,
             ("PUT", "/v1/model-aliases/{id}/status"),
-            lambda service: service.replace_alias_status(
+            lambda routes: routes.replace_alias_status(
                 "target-alias",
                 {"status": "inactive", "expected_updated_at": "2026-09-18T00:00:00Z"},
                 "Bearer safe-key",
@@ -166,8 +198,9 @@ def _context() -> PrincipalContext:
             403,
         ),
         (
+            CatalogRoutes,
             ("POST", "/v1/catalog/resources"),
-            lambda service: service.create_catalog_resource(
+            lambda routes: routes.create_catalog_resource(
                 {
                     "resource_type": "mcp_server",
                     "resource_id": "server-tools",
@@ -188,15 +221,17 @@ def _context() -> PrincipalContext:
             403,
         ),
         (
+            CatalogRoutes,
             ("GET", "/v1/catalog/resources"),
-            lambda service: service.list_catalog_resources(
+            lambda routes: routes.list_catalog_resources(
                 "Bearer safe-key", None, None, None, None, "100", {}
             ),
             403,
         ),
         (
+            CatalogRoutes,
             ("GET", "/v1/catalog/resources/{type}/{id}"),
-            lambda service: service.get_catalog_resource(
+            lambda routes: routes.get_catalog_resource(
                 "mcp_server", "server-tools", "Bearer safe-key"
             ),
             403,
@@ -205,61 +240,29 @@ def _context() -> PrincipalContext:
 )
 def test_engine_denial_precedes_target_access_for_every_control_operation(
     monkeypatch: pytest.MonkeyPatch,
+    routes_of: type,
     operation: tuple[str, str],
     invoke: object,
     expected_status: int,
 ) -> None:
     """A denied control action cannot probe any target principal or credential."""
-    import sre_agent.control.service as service_module
-
-    for repository in (
-        "PrincipalRepository",
-        "CredentialRepository",
-        "GrantRepository",
-        "IdempotencyRepository",
-        "ModelAliasRepository",
-        "CatalogRepository",
-    ):
-        monkeypatch.setattr(service_module, repository, _TargetAccessed)
-
-    service = ControlService.__new__(ControlService)
-    service.audit = _Audit()
-    service.projector = AuditProjector(b"x" * 32)
-    service._authenticate = AsyncMock(return_value=_context())
+    _refuse_repositories(monkeypatch, REPOSITORIES)
+    monkeypatch.setattr(
+        "sre_agent.gate.pipeline.active_principal", AsyncMock(return_value=_context())
+    )
     denied = AuthorizationEvaluation(
         decision=PolicyDecision(decision="deny", reason_code="no_matching_grant", policy_id=None),
         denial_cause=AuthorizationDenialCause.GRANT_NOT_APPLICABLE,
     )
-    service._authorize = AsyncMock(return_value=denied)
+    authorize = AsyncMock(return_value=denied)
+    monkeypatch.setattr(Gate, "authorize", authorize)
 
     @asynccontextmanager
     async def sessions():
         yield object()
 
-    service.sessions = sessions
-    shared = AsyncMock(return_value=(_context(), denied))
-    monkeypatch.setattr(service_module, "authorize_governed_access", shared)
-    response = asyncio.run(invoke(service))
+    routes = routes_of(sessions, _Audit(), AuditProjector(b"x" * 32))
+    response = asyncio.run(invoke(routes))
 
     assert response.status_code == expected_status
-    action, resource_type, resource_id = CONTROL_SCOPES[operation]
-    if operation in {
-        ("POST", "/v1/principals"),
-        ("GET", "/v1/principals"),
-        ("GET", "/v1/principals/{id}"),
-        ("POST", "/v1/grants"),
-        ("GET", "/v1/grants"),
-        ("POST", "/v1/model-aliases"),
-        ("GET", "/v1/model-aliases"),
-        ("POST", "/v1/catalog/resources"),
-        ("GET", "/v1/catalog/resources"),
-    }:
-        shared.assert_awaited_once_with(
-            service.sessions, "Bearer safe-key", action, resource_type, resource_id
-        )
-    else:
-        service._authorize.assert_awaited_once_with(
-            ANY,
-            _context().principal,
-            (action, resource_type, resource_id),
-        )
+    authorize.assert_awaited_once_with(_context(), Scope(*CONTROL_SCOPES[operation]))

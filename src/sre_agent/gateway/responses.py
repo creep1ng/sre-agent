@@ -277,7 +277,7 @@ class ResponsesService:  # noqa: E305
         self.sessions, self.provider, self.audit, self.projector = sessions, provider, audit, projector
         self.admission, self.endpoint_catalog = admission, endpoint_catalog
         self.provider_timeout_seconds = provider_timeout_seconds
-        self.gate: Gate[ResponsesRequest] = Gate(
+        self.gate: Gate[ResponsesRequest, tuple[Any, RequestAttribution | None]] = Gate(
             sessions, REFUSALS, audit=self._audit, project=self._project
         )
 

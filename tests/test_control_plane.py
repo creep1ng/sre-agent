@@ -15,19 +15,20 @@ from fastapi.responses import JSONResponse, Response
 from jsonschema import Draft202012Validator
 from pydantic import ValidationError
 
-from sre_agent.control import scopes
-from sre_agent.control.scopes import CONTROL_SCOPES
-from sre_agent.control.service import (
-    CONTROL_OPERATIONS,
-    ControlService,
-    SkillPublishRequest,
-    _key_digest,
-    _payload_sha256,
-    _public_principal,
-    control_router,
-)
+from sre_agent.control import operations as scopes
+from sre_agent.control.aliases import AliasRoutes, aliases_router
+from sre_agent.control.bok import BoKRoutes, bok_router
+from sre_agent.control.catalog import CatalogRoutes, catalog_router
+from sre_agent.control.credentials import CredentialRoutes, credentials_router
+from sre_agent.control.governed import key_digest as _key_digest
+from sre_agent.control.governed import payload_sha256 as _payload_sha256
+from sre_agent.control.grants import GrantRoutes, grants_router
+from sre_agent.control.operations import CONTROL_OPERATIONS, CONTROL_SCOPES
+from sre_agent.control.principals import PrincipalRoutes, principals_router
+from sre_agent.control.principals import public_principal as _public_principal
+from sre_agent.control.skills import SkillPublishRequest, SkillRoutes, skills_router
+from sre_agent.gate.pipeline import Gate
 from sre_agent.gateway.audit import AuditProjector
-from sre_agent.gateway.authentication import AuthenticationFailed
 from sre_agent.governance.authorization import AuthorizationDenialCause, AuthorizationEvaluation
 from sre_agent.governance.dto import PolicyDecision, Principal, PrincipalContext, Resource
 
@@ -53,7 +54,7 @@ def test_administrative_control_is_a_governed_resource_type() -> None:
 
 
 def test_control_grant_actions_cover_read_and_write() -> None:
-    from sre_agent.control.scopes import CONTROL_SCOPES
+    from sre_agent.control.operations import CONTROL_SCOPES
 
     assert CONTROL_SCOPES[("GET", "/v1/principals")] == (
         "admin.read",
@@ -270,66 +271,42 @@ def test_control_projector_rejects_llm_routing_evidence() -> None:
         raise AssertionError("allow without grant must fail")
 
 
-def test_finish_maps_terminal_attempts_to_valid_control_audit() -> None:
-    import asyncio
-
-    from sre_agent.control.service import ControlService
+def test_control_audit_maps_terminal_attempts_to_valid_control_audit() -> None:
+    """The control audit event of an allowed 200 at a stage without subject evidence, and of a
+    denied 403 at authorization (what ControlService._finish projected before the gate)."""
+    from sre_agent.control.governed import ControlAudit
+    from sre_agent.control.operations import CONTROL
+    from sre_agent.gate.pipeline import Terminal
     from sre_agent.governance.dto import PolicyDecision
 
-    projector = AuditProjector(b"x" * 32)
-    appended: list = []
-
-    class Audit:
-        async def append(self, event):
-            appended.append(event)
-            return event
-
-    service = ControlService.__new__(ControlService)
-    service.projector = projector
-    service.audit = Audit()
-
-    async def run() -> None:
-        allow = PolicyDecision(decision="allow", reason_code="grant_matched", policy_id="g")
-        deny = PolicyDecision(decision="deny", reason_code="no_matching_grant", policy_id=None)
-        now = datetime(2026, 9, 4, tzinfo=UTC)
-        context = type(
-            "Context",
-            (),
-            {
-                "principal": _principal(),
-                "credential_id": "credential-admin-human",
-                "authenticated_at": now,
-            },
-        )()
-        ok_200 = await service._finish(
-            uuid4(),
-            0.0,
-            200,
-            "audit",
-            "principals.list",
-            "admin.read",
-            payload={"items": []},
-            context=context,
-            resource_ref=("administrative_control", "principals"),
-            decision=allow,
-        )
-        assert ok_200.status_code == 200
-        denied_403 = await service._finish(
-            uuid4(),
-            0.0,
-            403,
-            "authorization",
-            "principals.create",
-            "admin.write",
-            error_code="resource_unavailable",
-            context=context,
-            resource_ref=("administrative_control", "principals"),
-            decision=deny,
-            authorization_denial_cause="grant_not_applicable",
-        )
-        assert denied_403.status_code == 403
-
-    asyncio.run(run())
+    audit = ControlAudit(None, AuditProjector(b"x" * 32))  # type: ignore[arg-type]
+    allow = PolicyDecision(decision="allow", reason_code="grant_matched", policy_id="g")
+    deny = PolicyDecision(decision="deny", reason_code="no_matching_grant", policy_id=None)
+    now = datetime(2026, 9, 4, tzinfo=UTC)
+    context = type(
+        "Context",
+        (),
+        {
+            "principal": _principal(),
+            "credential_id": "credential-admin-human",
+            "authenticated_at": now,
+        },
+    )()
+    allowed = AuthorizationEvaluation(allow, None)
+    denied = AuthorizationEvaluation(deny, AuthorizationDenialCause.GRANT_NOT_APPLICABLE)
+    appended = [
+        audit.event(
+            CONTROL[("GET", "/v1/principals")],
+            Terminal(uuid4(), 0, 200, "audit", context, allowed, None, {}),
+            None,
+        ),
+        audit.event(
+            CONTROL[("POST", "/v1/principals")],
+            Terminal(uuid4(), 0, 403, "authorization", context, denied, None, {}),
+            "resource_unavailable",
+        ),
+    ]
+    assert [event.response_status for event in appended] == [200, 403]
     assert [event.stage for event in appended] == ["audit", "authorization"]
     assert appended[0].identity is None and appended[0].resource is None
     assert appended[0].reason_code is None
@@ -337,42 +314,69 @@ def test_finish_maps_terminal_attempts_to_valid_control_audit() -> None:
     assert appended[1].authorization_denial_cause == "grant_not_applicable"
 
 
-def _stub_service(monkey_result=None, status=201, payload=None):
-    from sre_agent.control.service import ControlService
-
-    service = ControlService.__new__(ControlService)
-    service.create_principal = AsyncMock(
+def _stub_principals(status=201, payload=None) -> PrincipalRoutes:
+    routes = PrincipalRoutes.__new__(PrincipalRoutes)
+    routes.create_principal = AsyncMock(
         return_value=JSONResponse(payload or _public_principal(_principal("new-human")), status)
     )
-    service.list_principals = AsyncMock(
+    routes.list_principals = AsyncMock(
         return_value=JSONResponse({"items": [], "limit": 100, "truncated": False}, 200)
     )
-    service.get_principal = AsyncMock(
+    routes.get_principal = AsyncMock(
         return_value=JSONResponse(_public_principal(_principal()), 200)
     )
-    service.revoke_grant = AsyncMock(return_value=Response(status_code=204))
-    service.create_grant = AsyncMock(return_value=JSONResponse({}, 201))
-    service.list_grants = AsyncMock(
+    return routes
+
+
+def _stub_grants() -> GrantRoutes:
+    routes = GrantRoutes.__new__(GrantRoutes)
+    routes.revoke_grant = AsyncMock(return_value=Response(status_code=204))
+    routes.create_grant = AsyncMock(return_value=JSONResponse({}, 201))
+    routes.list_grants = AsyncMock(
         return_value=JSONResponse({"items": [], "limit": 100, "truncated": False}, 200)
     )
-    service.create_alias = AsyncMock(return_value=JSONResponse({}, 201))
-    service.list_aliases = AsyncMock(
+    return routes
+
+
+def _stub_aliases() -> AliasRoutes:
+    routes = AliasRoutes.__new__(AliasRoutes)
+    routes.create_alias = AsyncMock(return_value=JSONResponse({}, 201))
+    routes.replace_alias_assignment = AsyncMock(return_value=JSONResponse({}, 200))
+    routes.replace_alias_status = AsyncMock(return_value=JSONResponse({}, 200))
+    routes.list_aliases = AsyncMock(
         return_value=JSONResponse({"items": [], "limit": 100, "truncated": False}, 200)
     )
-    service.get_alias = AsyncMock(return_value=JSONResponse({}, 200))
-    service.replace_alias_assignment = AsyncMock(return_value=JSONResponse({}, 200))
-    service.replace_alias_status = AsyncMock(return_value=JSONResponse({}, 200))
-    service.create_catalog_resource = AsyncMock(return_value=JSONResponse({}, 201))
-    service.list_catalog_resources = AsyncMock(
+    routes.get_alias = AsyncMock(return_value=JSONResponse({}, 200))
+    return routes
+
+
+def _stub_catalog() -> CatalogRoutes:
+    routes = CatalogRoutes.__new__(CatalogRoutes)
+    routes.create_catalog_resource = AsyncMock(return_value=JSONResponse({}, 201))
+    routes.list_catalog_resources = AsyncMock(
         return_value=JSONResponse({"items": [], "limit": 100, "truncated": False}, 200)
     )
-    service.get_catalog_resource = AsyncMock(return_value=JSONResponse({}, 200))
-    return service
+    routes.get_catalog_resource = AsyncMock(return_value=JSONResponse({}, 200))
+    return routes
+
+
+def _control_app(principals, credentials=None, grants=None) -> FastAPI:
+    """Every control router, as the application mounts them."""
+    app = FastAPI()
+    app.include_router(principals_router(principals))
+    app.include_router(
+        credentials_router(credentials or CredentialRoutes.__new__(CredentialRoutes))
+    )
+    app.include_router(grants_router(grants or _stub_grants()))
+    app.include_router(aliases_router(_stub_aliases()))
+    app.include_router(catalog_router(_stub_catalog()))
+    app.include_router(skills_router(SkillRoutes.__new__(SkillRoutes)))
+    app.include_router(bok_router(BoKRoutes.__new__(BoKRoutes)))
+    return app
 
 
 def test_router_exposes_all_control_routes() -> None:
-    app = FastAPI()
-    app.include_router(control_router(_stub_service()))
+    app = _control_app(_stub_principals())
     routes = {(r.path, tuple(sorted(r.methods))) for r in app.routes if r.path.startswith("/v1/")}
 
     assert ("/v1/principals", ("GET",)) in routes
@@ -423,17 +427,13 @@ def test_router_exposes_all_control_routes() -> None:
 
 
 def test_router_audits_invalid_inputs_with_contract_envelopes() -> None:
-    from sre_agent.control.service import ControlService
-
     appended: list = []
 
     class Audit:
         async def append(self, event):
             appended.append(event)
 
-    service = ControlService(None, Audit(), AuditProjector(b"x" * 32))
-    app = FastAPI()
-    app.include_router(control_router(service))
+    app = _control_app(PrincipalRoutes(None, Audit(), AuditProjector(b"x" * 32)))
 
     async def exercise() -> tuple[httpx.Response, ...]:
         async with httpx.AsyncClient(
@@ -468,15 +468,11 @@ def test_router_audits_invalid_inputs_with_contract_envelopes() -> None:
 
 
 def test_invalid_input_is_suppressed_when_audit_sink_rejects() -> None:
-    from sre_agent.control.service import ControlService
-
     class RejectingAudit:
         async def append(self, event):
             raise RuntimeError("sink rejected")
 
-    service = ControlService(None, RejectingAudit(), AuditProjector(b"x" * 32))
-    app = FastAPI()
-    app.include_router(control_router(service))
+    app = _control_app(PrincipalRoutes(None, RejectingAudit(), AuditProjector(b"x" * 32)))
 
     async def exercise() -> httpx.Response:
         async with httpx.AsyncClient(
@@ -493,8 +489,7 @@ def test_invalid_input_is_suppressed_when_audit_sink_rejects() -> None:
 
 
 def test_control_openapi_publishes_request_success_and_error_schemas() -> None:
-    app = FastAPI()
-    app.include_router(control_router(_stub_service()))
+    app = _control_app(_stub_principals())
     paths = app.openapi()["paths"]
 
     create = paths["/v1/principals"]["post"]
@@ -550,8 +545,7 @@ def test_control_openapi_error_responses_match_canonical_fixtures() -> None:
     }
     payloads = {name: json.loads(path.read_text())["data"] for name, path in fixtures.items()}
 
-    app = FastAPI()
-    app.include_router(control_router(_stub_service()))
+    app = _control_app(_stub_principals())
     document = app.openapi()
     validator = Draft202012Validator(document)
 
@@ -598,18 +592,22 @@ def test_principal_operations_use_shared_governed_authorization_before_effects(
         None,
     )
     audit = Audit()
-    service = ControlService(lambda: Session(), audit, AuditProjector(b"x" * 32))
+    service = PrincipalRoutes(lambda: Session(), audit, AuditProjector(b"x" * 32))
     effects = AsyncMock(return_value=None)
-    monkeypatch.setattr("sre_agent.control.service.PrincipalRepository.create", effects)
-    monkeypatch.setattr("sre_agent.control.service.PrincipalRepository.list", effects)
-    monkeypatch.setattr("sre_agent.control.service.PrincipalRepository.get", effects)
+    monkeypatch.setattr("sre_agent.control.principals.PrincipalRepository.create", effects)
+    monkeypatch.setattr("sre_agent.control.principals.PrincipalRepository.list", effects)
+    monkeypatch.setattr("sre_agent.control.principals.PrincipalRepository.get", effects)
     calls = []
 
-    async def denied(*args):
-        calls.append(args[2:])
-        return context, deny
+    async def authenticated(*_):
+        return context
 
-    monkeypatch.setattr("sre_agent.control.service.authorize_governed_access", denied)
+    async def denied(_gate, _context, scope):
+        calls.append((scope.action, scope.resource_type, scope.resource_id))
+        return deny
+
+    monkeypatch.setattr("sre_agent.gate.pipeline.active_principal", authenticated)
+    monkeypatch.setattr(Gate, "authorize", denied)
 
     async def exercise_denials():
         return (
@@ -632,17 +630,18 @@ def test_principal_operations_use_shared_governed_authorization_before_effects(
     ]
 
     async def invalid(*_):
-        raise AuthenticationFailed
+        return None
 
-    monkeypatch.setattr("sre_agent.control.service.authorize_governed_access", invalid)
+    monkeypatch.setattr("sre_agent.gate.pipeline.active_principal", invalid)
     invalid_responses = asyncio.run(exercise_denials())
     assert [response.status_code for response in invalid_responses] == [401, 401, 401]
     assert effects.await_count == 0
 
     async def allowed(*_):
-        return context, allow
+        return allow
 
-    monkeypatch.setattr("sre_agent.control.service.authorize_governed_access", allowed)
+    monkeypatch.setattr("sre_agent.gate.pipeline.active_principal", authenticated)
+    monkeypatch.setattr(Gate, "authorize", allowed)
     missing = asyncio.run(service.get_principal("missing-human", "Bearer sre_valid_key"))
     assert missing.status_code == 404
     assert effects.await_count == 1

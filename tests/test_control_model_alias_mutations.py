@@ -14,18 +14,12 @@ from unittest.mock import AsyncMock
 
 import httpx
 import pytest
-from control_testkit import _context, _deny, _service, _TargetAccessed
+from control_testkit import _context, _deny, _gate, _routes, _TargetAccessed
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-from sre_agent.control.scopes import CONTROL_SCOPES
-from sre_agent.control.service import (
-    CONTROL_OPERATIONS,
-    ControlService,
-)
-from sre_agent.control.service import (
-    control_router as build_control_router,
-)
+from sre_agent.control.aliases import AliasRoutes, aliases_router
+from sre_agent.control.operations import CONTROL_OPERATIONS, CONTROL_SCOPES
 from sre_agent.governance.dto import AuditEvent
 
 EXPECTED_UPDATED_AT = "2026-09-18T00:00:00Z"
@@ -75,9 +69,9 @@ def test_alias_mutation_operations_match_scopes() -> None:
         {**ASSIGNMENT_BODY, "expected_updated_at": "2026-09-18"},
     ],
 )
-def test_alias_assignment_rejects_non_closed_bodies(body: dict) -> None:
-    service = _service()
-    service._authenticate = AsyncMock(return_value=_context())
+def test_alias_assignment_rejects_non_closed_bodies(body: dict, monkeypatch) -> None:
+    service = _routes(AliasRoutes)
+    _gate(monkeypatch, _context())
 
     async def run():
         return await service.replace_alias_assignment("t5-alias", body, "Bearer sre_valid_key")
@@ -100,9 +94,9 @@ def test_alias_assignment_rejects_non_closed_bodies(body: dict) -> None:
         {**STATUS_BODY, "status": "active", "expected_updated_at": "not-a-datetime"},
     ],
 )
-def test_alias_status_rejects_non_closed_bodies(body: dict) -> None:
-    service = _service()
-    service._authenticate = AsyncMock(return_value=_context())
+def test_alias_status_rejects_non_closed_bodies(body: dict, monkeypatch) -> None:
+    service = _routes(AliasRoutes)
+    _gate(monkeypatch, _context())
 
     async def run():
         return await service.replace_alias_status("t5-alias", body, "Bearer sre_valid_key")
@@ -123,16 +117,18 @@ def test_alias_mutations_need_no_idempotency_key_but_require_closed_token(
     """
     import inspect
 
-    assert "idempotency" not in inspect.signature(getattr(ControlService, method)).parameters
+    assert "idempotency" not in inspect.signature(getattr(AliasRoutes, method)).parameters
 
 
 @pytest.mark.parametrize(
     "alias_id", ["INVALID", "ab", "has space", "upper-ok-but-long-" + "x" * 60]
 )
 @pytest.mark.parametrize("method", ["replace_alias_assignment", "replace_alias_status"])
-def test_alias_mutations_reject_malformed_identifiers(alias_id: str, method: str) -> None:
-    service = _service()
-    service._authenticate = AsyncMock(return_value=_context())
+def test_alias_mutations_reject_malformed_identifiers(
+    alias_id: str, method: str, monkeypatch
+) -> None:
+    service = _routes(AliasRoutes)
+    _gate(monkeypatch, _context())
     body = ASSIGNMENT_BODY if method == "replace_alias_assignment" else STATUS_BODY
 
     async def run():
@@ -144,34 +140,32 @@ def test_alias_mutations_reject_malformed_identifiers(alias_id: str, method: str
 
 @pytest.mark.parametrize("method", ["replace_alias_assignment", "replace_alias_status"])
 def test_alias_mutation_denial_precedes_lookup(method: str, monkeypatch) -> None:
-    import sre_agent.control.service as service_module
+    import sre_agent.control.aliases as service_module
 
     monkeypatch.setattr(service_module, "ModelAliasRepository", _TargetAccessed)
     from contextlib import asynccontextmanager
 
-    service = _service()
-    service._authenticate = AsyncMock(return_value=_context())
-    service._authorize = AsyncMock(return_value=_deny())
+    authorize = _gate(monkeypatch, _context(), _deny())
     body = ASSIGNMENT_BODY if method == "replace_alias_assignment" else STATUS_BODY
 
     @asynccontextmanager
     async def sessions():
         yield object()
 
-    service.sessions = sessions
+    service = _routes(AliasRoutes, sessions)
 
     async def run():
         return await getattr(service, method)("t5-alias", body, "Bearer safe-key")
 
     response = asyncio.run(run())
     assert response.status_code == 403
-    service._authorize.assert_awaited_once()
+    authorize.assert_awaited_once()
 
 
 @pytest.mark.parametrize("method", ["replace_alias_assignment", "replace_alias_status"])
-def test_alias_mutations_reject_unauthenticated_before_lookup(method: str) -> None:
-    service = _service()
-    service._authenticate = AsyncMock(return_value=None)
+def test_alias_mutations_reject_unauthenticated_before_lookup(method: str, monkeypatch) -> None:
+    service = _routes(AliasRoutes)
+    _gate(monkeypatch, None)
     body = ASSIGNMENT_BODY if method == "replace_alias_assignment" else STATUS_BODY
 
     async def run():
@@ -181,17 +175,17 @@ def test_alias_mutations_reject_unauthenticated_before_lookup(method: str) -> No
     assert response.status_code == 401
 
 
-def _stub_mutation_service():
-    service = ControlService.__new__(ControlService)
+def _stub_mutation_routes() -> AliasRoutes:
+    routes = AliasRoutes.__new__(AliasRoutes)
     mutated = JSONResponse({**ASSIGNMENT_BODY, "model_alias_id": "t5-alias"}, 200)
-    service.replace_alias_assignment = AsyncMock(return_value=mutated)
-    service.replace_alias_status = AsyncMock(return_value=mutated)
-    return service
+    routes.replace_alias_assignment = AsyncMock(return_value=mutated)
+    routes.replace_alias_status = AsyncMock(return_value=mutated)
+    return routes
 
 
 def test_router_exposes_alias_assignment_and_status_replace() -> None:
     app = FastAPI()
-    app.include_router(build_control_router(_stub_mutation_service()))
+    app.include_router(aliases_router(_stub_mutation_routes()))
     routes = {(r.path, tuple(sorted(r.methods))) for r in app.routes if r.path.startswith("/v1/")}
 
     assert ("/v1/model-aliases/{alias_id}/assignment", ("PUT",)) in routes
@@ -212,7 +206,7 @@ def test_router_exposes_alias_assignment_and_status_replace() -> None:
 
 def test_alias_mutation_openapi_marks_closed_cas_bodies_without_idempotency_key() -> None:
     app = FastAPI()
-    app.include_router(build_control_router(_stub_mutation_service()))
+    app.include_router(aliases_router(_stub_mutation_routes()))
     paths = app.openapi()["paths"]
 
     for route, required in (

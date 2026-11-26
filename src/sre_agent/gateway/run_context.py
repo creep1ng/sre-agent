@@ -14,7 +14,7 @@ from sre_agent.gateway.incidents import (
     NOT_FOUND,
     UNAVAILABLE,
     IncidentQueryService,
-    _identifiers,
+    check_identifiers,
     read_operation,
 )
 from sre_agent.incident.persistence import TextContextRecord
@@ -116,7 +116,7 @@ class RunContextService(IncidentQueryService):
             return Released(payload, headers={"Cache-Control": "no-store"})
 
         return await self._read(
-            CONTEXT, authorization, lambda: _identifiers(incident_id, run_id), run_context
+            CONTEXT, authorization, lambda: check_identifiers(incident_id, run_id), run_context
         )
 
 

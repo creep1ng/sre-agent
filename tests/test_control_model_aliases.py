@@ -13,20 +13,13 @@ from unittest.mock import AsyncMock
 
 import httpx
 import pytest
-from control_testkit import _deny, _service, _TargetAccessed
+from control_testkit import _deny, _gate, _refuse_repositories, _routes, _TargetAccessed
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-from sre_agent.control.scopes import CONTROL_SCOPES
-from sre_agent.control.service import (
-    CONTROL_OPERATIONS,
-    ControlService,
-)
-from sre_agent.control.service import (
-    control_router as build_control_router,
-)
+from sre_agent.control.aliases import AliasRoutes, aliases_router
+from sre_agent.control.operations import CONTROL_OPERATIONS, CONTROL_SCOPES
 from sre_agent.gateway.audit import AuditProjector
-from sre_agent.gateway.authentication import AuthenticationFailed
 from sre_agent.governance.authorization import AuthorizationEvaluation
 from sre_agent.governance.dto import AuditEvent, PolicyDecision, Principal, PrincipalContext
 
@@ -71,18 +64,15 @@ def test_alias_create_rejects_non_openrouter_router_before_effects(monkeypatch) 
 
     from sqlalchemy.exc import IntegrityError
 
-    import sre_agent.control.service as service_module
+    import sre_agent.control.aliases as service_module
     from sre_agent.persistence.repositories import IdempotencyBinding
 
     touched: list[str] = []
-
-    async def allowed(*_args: object):
-        return _context(), AuthorizationEvaluation(
-            PolicyDecision(decision="allow", reason_code="grant_matched", policy_id="grant-admin"),
-            None,
-        )
-
-    monkeypatch.setattr(service_module, "authorize_governed_access", allowed)
+    allowed = AuthorizationEvaluation(
+        PolicyDecision(decision="allow", reason_code="grant_matched", policy_id="grant-admin"),
+        None,
+    )
+    _gate(monkeypatch, _context(), allowed)
 
     class _Session:
         @asynccontextmanager
@@ -133,7 +123,7 @@ def test_alias_create_rejects_non_openrouter_router_before_effects(monkeypatch) 
             recorded.append(event)
             return event
 
-    service = ControlService(lambda: _Sessions(), _RecordingAudit(), AuditProjector(b"x" * 32))
+    service = AliasRoutes(lambda: _Sessions(), _RecordingAudit(), AuditProjector(b"x" * 32))
     body = {**ALIAS_BODY, "model_alias_id": "t3-direct", "alias": "t3-direct", "router": "direct"}
 
     async def run():
@@ -187,7 +177,7 @@ def test_alias_operations_match_scopes() -> None:
     ],
 )
 def test_alias_create_rejects_non_closed_bodies(body: dict) -> None:
-    service = _service()
+    service = _routes(AliasRoutes)
 
     async def run():
         return await service.create_alias(body, "Bearer sre_valid_key", "k" * 16)
@@ -198,7 +188,7 @@ def test_alias_create_rejects_non_closed_bodies(body: dict) -> None:
 
 
 def test_alias_create_requires_idempotency_key() -> None:
-    service = _service()
+    service = _routes(AliasRoutes)
 
     async def run():
         return await service.create_alias(ALIAS_BODY, "Bearer sre_valid_key", None)
@@ -209,22 +199,12 @@ def test_alias_create_requires_idempotency_key() -> None:
 
 
 def test_alias_create_denial_precedes_target_access(monkeypatch) -> None:
-    import sre_agent.control.service as service_module
-
-    for repository in (
-        "ModelAliasRepository",
-        "GrantRepository",
-        "IdempotencyRepository",
-        "ResourceRepository",
-    ):
-        monkeypatch.setattr(service_module, repository, _TargetAccessed)
-    context = _context()
-
-    async def denied(*_args):
-        return context, _deny()
-
-    monkeypatch.setattr(service_module, "authorize_governed_access", denied)
-    service = _service()
+    _refuse_repositories(
+        monkeypatch,
+        ("ModelAliasRepository", "GrantRepository", "IdempotencyRepository", "ResourceRepository"),
+    )
+    _gate(monkeypatch, _context(), _deny())
+    service = _routes(AliasRoutes)
 
     async def run():
         return await service.create_alias(ALIAS_BODY, "Bearer safe-key", "k" * 16)
@@ -234,13 +214,8 @@ def test_alias_create_denial_precedes_target_access(monkeypatch) -> None:
 
 
 def test_alias_create_rejects_unauthenticated_before_effects(monkeypatch) -> None:
-    import sre_agent.control.service as service_module
-
-    async def invalid(*_args):
-        raise AuthenticationFailed
-
-    monkeypatch.setattr(service_module, "authorize_governed_access", invalid)
-    service = _service()
+    _gate(monkeypatch, None)
+    service = _routes(AliasRoutes)
 
     async def run():
         return await service.create_alias(ALIAS_BODY, "Bearer bad-key", "k" * 16)
@@ -264,7 +239,7 @@ def test_alias_create_rejects_unauthenticated_before_effects(monkeypatch) -> Non
     ],
 )
 def test_alias_list_rejects_bad_limits_and_unknown_params(limit: str, extra: dict) -> None:
-    service = _service()
+    service = _routes(AliasRoutes)
 
     async def run():
         return await service.list_aliases("Bearer sre_valid_key", limit, extra)
@@ -274,16 +249,11 @@ def test_alias_list_rejects_bad_limits_and_unknown_params(limit: str, extra: dic
 
 
 def test_alias_list_denial_precedes_target_access(monkeypatch) -> None:
-    import sre_agent.control.service as service_module
+    import sre_agent.control.aliases as service_module
 
     monkeypatch.setattr(service_module, "ModelAliasRepository", _TargetAccessed)
-    context = _context()
-
-    async def denied(*_args):
-        return context, _deny()
-
-    monkeypatch.setattr(service_module, "authorize_governed_access", denied)
-    service = _service()
+    _gate(monkeypatch, _context(), _deny())
+    service = _routes(AliasRoutes)
 
     async def run():
         return await service.list_aliases("Bearer safe-key", "100", {})
@@ -295,9 +265,9 @@ def test_alias_list_denial_precedes_target_access(monkeypatch) -> None:
 @pytest.mark.parametrize(
     "alias_id", ["INVALID", "ab", "has space", "upper-ok-but-long-" + "x" * 60]
 )
-def test_alias_get_rejects_malformed_identifiers(alias_id: str) -> None:
-    service = _service()
-    service._authenticate = AsyncMock(return_value=_context())
+def test_alias_get_rejects_malformed_identifiers(alias_id: str, monkeypatch) -> None:
+    service = _routes(AliasRoutes)
+    _gate(monkeypatch, _context())
 
     async def run():
         return await service.get_alias(alias_id, "Bearer sre_valid_key")
@@ -306,30 +276,28 @@ def test_alias_get_rejects_malformed_identifiers(alias_id: str) -> None:
     assert response.status_code == 422
 
 
-def test_alias_get_denial_precedes_lookup() -> None:
+def test_alias_get_denial_precedes_lookup(monkeypatch) -> None:
     from contextlib import asynccontextmanager
 
-    service = _service()
-    service._authenticate = AsyncMock(return_value=_context())
-    service._authorize = AsyncMock(return_value=_deny())
+    authorize = _gate(monkeypatch, _context(), _deny())
 
     @asynccontextmanager
     async def sessions():
         yield object()
 
-    service.sessions = sessions
+    service = _routes(AliasRoutes, sessions)
 
     async def run():
         return await service.get_alias("t3-alias", "Bearer safe-key")
 
     response = asyncio.run(run())
     assert response.status_code == 403
-    service._authorize.assert_awaited_once()
+    authorize.assert_awaited_once()
 
 
-def test_alias_get_rejects_unauthenticated_before_lookup() -> None:
-    service = _service()
-    service._authenticate = AsyncMock(return_value=None)
+def test_alias_get_rejects_unauthenticated_before_lookup(monkeypatch) -> None:
+    service = _routes(AliasRoutes)
+    _gate(monkeypatch, None)
 
     async def run():
         return await service.get_alias("t3-alias", "Bearer bad-key")
@@ -338,22 +306,21 @@ def test_alias_get_rejects_unauthenticated_before_lookup() -> None:
     assert response.status_code == 401
 
 
-def _stub_alias_service():
-    service = ControlService.__new__(ControlService)
+def _stub_alias_app() -> FastAPI:
+    routes = AliasRoutes.__new__(AliasRoutes)
     created = JSONResponse({**ALIAS_BODY, "status": "active"}, 201)
-    service.create_alias = AsyncMock(return_value=created)
-    service.list_aliases = AsyncMock(
+    routes.create_alias = AsyncMock(return_value=created)
+    routes.list_aliases = AsyncMock(
         return_value=JSONResponse({"items": [], "limit": 100, "truncated": False}, 200)
     )
-    service.get_alias = AsyncMock(
-        return_value=JSONResponse({**ALIAS_BODY, "status": "active"}, 200)
-    )
-    return service
+    routes.get_alias = AsyncMock(return_value=JSONResponse({**ALIAS_BODY, "status": "active"}, 200))
+    app = FastAPI()
+    app.include_router(aliases_router(routes))
+    return app
 
 
 def test_router_exposes_alias_create_and_reads() -> None:
-    app = FastAPI()
-    app.include_router(build_control_router(_stub_alias_service()))
+    app = _stub_alias_app()
     routes = {(r.path, tuple(sorted(r.methods))) for r in app.routes if r.path.startswith("/v1/")}
 
     assert ("/v1/model-aliases", ("GET", "POST")) in routes or (
@@ -379,8 +346,7 @@ def test_router_exposes_alias_create_and_reads() -> None:
 
 
 def test_alias_openapi_marks_idempotency_scope_and_closed_list() -> None:
-    app = FastAPI()
-    app.include_router(build_control_router(_stub_alias_service()))
+    app = _stub_alias_app()
     paths = app.openapi()["paths"]
 
     create = paths["/v1/model-aliases"]["post"]
