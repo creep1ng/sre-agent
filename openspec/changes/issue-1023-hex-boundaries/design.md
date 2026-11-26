@@ -28,7 +28,9 @@ The ADR's list: SQLAlchemy, FastAPI, Starlette, psycopg, httpx, `persistence`, `
 `triage/` and `cli/` gain an `__init__.py`: import-linter does not see a directory without one,
 and a source module that does not exist is a configuration error. An `ignore_imports` line
 covers what it names: any part of an external package, or one module of ours. A later layer
-adds `settings` as the source of a contract once `settings.py` stops importing the investigator.
+adds `settings` as the source of a contract once `settings.py` stops importing the investigator,
+and `seed_settings` when it is created. `settings.py` imports no `governance` either: the executor
+imports it, and the executor's contract forbids `governance`.
 
 ## Verification per layer
 
