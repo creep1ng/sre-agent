@@ -2,6 +2,12 @@
 root_package = sre_agent
 include_external_packages = True
 
+# ADR-009 (docs/adrs/ADR-009-core-ports-and-adapters.md): the core imports no framework and no
+# adapter. Each ignore_imports line is a violation on main that a later layer of the #1023 stack
+# removes; the lists only shrink, and no change adds a line to pass. A line covers the imports of
+# exactly what it names: any part of an external package (`sqlalchemy`), or that one module of
+# ours (`sre_agent.persistence.models`, not `sre_agent.persistence.bok`).
+
 [importlinter:contract:incident-does-not-use-concrete-adapters]
 name = Incident core does not use concrete adapters
 type = forbidden
@@ -11,7 +17,14 @@ forbidden_modules =
     sre_agent.persistence
     sre_agent.gateway
     sre_agent.control
+    sre_agent.gate
+    sre_agent.cli
     sre_agent.application
+    fastapi
+    starlette
+    sqlalchemy
+    psycopg
+    httpx
 
 [importlinter:contract:governance-does-not-use-concrete-adapters]
 name = Governance does not use concrete adapters
@@ -22,7 +35,14 @@ forbidden_modules =
     sre_agent.persistence
     sre_agent.gateway
     sre_agent.control
+    sre_agent.gate
+    sre_agent.cli
     sre_agent.application
+    fastapi
+    starlette
+    sqlalchemy
+    psycopg
+    httpx
 
 [importlinter:contract:persistence-does-not-use-delivery]
 name = Persistence does not use delivery or composition
@@ -55,10 +75,16 @@ forbidden_modules =
     sre_agent.incident
     sre_agent.gateway
     sre_agent.control
+    sre_agent.gate
+    sre_agent.cli
     sre_agent.application
     fastapi
+    starlette
     sqlalchemy
     psycopg
+    httpx
+ignore_imports =
+    sre_agent.investigator.client -> httpx
 
 [importlinter:contract:executor-is-isolated]
 name = The deploy-executor reaches only the Docker Engine API and imports no other plane
@@ -75,3 +101,147 @@ forbidden_modules =
     sre_agent.investigator
     sqlalchemy
     psycopg
+
+[importlinter:contract:executor-decisions-avoid-frameworks]
+name = The deploy-executor's decisions import no framework and no adapter of its process
+type = forbidden
+source_modules =
+    sre_agent.executor.catalog
+    sre_agent.executor.operations
+    sre_agent.executor.signature
+forbidden_modules =
+    sre_agent.executor.app
+    sre_agent.executor.docker
+    sre_agent.executor.flags
+    sre_agent.gate
+    sre_agent.cli
+    fastapi
+    starlette
+    httpx
+ignore_imports =
+    sre_agent.executor.operations -> sre_agent.executor.docker
+
+[importlinter:contract:mcp-and-vocabulary-use-no-adapters]
+name = MCP ownership and the vocabulary import no framework and no adapter
+type = forbidden
+source_modules =
+    sre_agent.mcp
+    sre_agent.vocabulary
+forbidden_modules =
+    sre_agent.persistence
+    sre_agent.gateway
+    sre_agent.control
+    sre_agent.gate
+    sre_agent.cli
+    sre_agent.application
+    fastapi
+    starlette
+    sqlalchemy
+    psycopg
+    httpx
+
+[importlinter:contract:triage-uses-ports-only]
+name = Triage reaches state and frameworks only through ports
+type = forbidden
+source_modules =
+    sre_agent.triage
+forbidden_modules =
+    sre_agent.persistence
+    sre_agent.gateway
+    sre_agent.control
+    sre_agent.gate
+    sre_agent.cli
+    sre_agent.application
+    fastapi
+    starlette
+    sqlalchemy
+    psycopg
+    httpx
+ignore_imports =
+    sre_agent.triage.service -> sqlalchemy
+    sre_agent.triage.service -> sre_agent.persistence.database
+    sre_agent.triage.service -> sre_agent.persistence.incidents
+    sre_agent.triage.service -> sre_agent.persistence.repositories
+    sre_agent.triage.store -> sqlalchemy
+
+[importlinter:contract:chat-uses-ports-only]
+name = Chat reaches state and frameworks only through ports
+type = forbidden
+source_modules =
+    sre_agent.chat
+forbidden_modules =
+    sre_agent.persistence
+    sre_agent.gateway
+    sre_agent.control
+    sre_agent.gate
+    sre_agent.cli
+    sre_agent.application
+    fastapi
+    starlette
+    sqlalchemy
+    psycopg
+    httpx
+ignore_imports =
+    sre_agent.chat.decisions -> sqlalchemy
+    sre_agent.chat.decisions -> sre_agent.persistence.database
+    sre_agent.chat.digest -> sqlalchemy
+    sre_agent.chat.outbox -> sqlalchemy
+    sre_agent.chat.outbox -> sre_agent.persistence.database
+    sre_agent.chat.taps -> sqlalchemy
+    sre_agent.chat.taps -> sre_agent.persistence.database
+    sre_agent.chat.taps -> sre_agent.gateway.runs
+    sre_agent.chat.telegram -> httpx
+    sre_agent.chat.telegram -> sre_agent.persistence.database
+
+[importlinter:contract:bok-uses-ports-only]
+name = BoK reaches state and frameworks only through ports
+type = forbidden
+source_modules =
+    sre_agent.bok
+forbidden_modules =
+    sre_agent.persistence
+    sre_agent.gateway
+    sre_agent.control
+    sre_agent.gate
+    sre_agent.cli
+    sre_agent.application
+    fastapi
+    starlette
+    sqlalchemy
+    psycopg
+    httpx
+ignore_imports =
+    sre_agent.bok.owner -> sqlalchemy
+    sre_agent.bok.owner -> sre_agent.persistence.models
+    sre_agent.bok.publication -> sqlalchemy
+    sre_agent.bok.publication -> sre_agent.persistence.models
+    sre_agent.bok.retrieval -> fastapi
+    sre_agent.bok.retrieval -> sqlalchemy
+    sre_agent.bok.retrieval -> sre_agent.gate.errors
+    sre_agent.bok.retrieval -> sre_agent.gate.pipeline
+    sre_agent.bok.retrieval -> sre_agent.gateway.audit
+    sre_agent.bok.retrieval -> sre_agent.gateway.responses
+    sre_agent.bok.retrieval -> sre_agent.persistence.models
+
+[importlinter:contract:only-the-entry-point-composes]
+name = Only the entry point imports the composition root
+type = forbidden
+source_modules =
+    sre_agent.bok
+    sre_agent.chat
+    sre_agent.cli
+    sre_agent.control
+    sre_agent.executor
+    sre_agent.gate
+    sre_agent.gateway
+    sre_agent.governance
+    sre_agent.incident
+    sre_agent.investigator
+    sre_agent.mcp
+    sre_agent.persistence
+    sre_agent.release
+    sre_agent.settings
+    sre_agent.triage
+    sre_agent.vocabulary
+forbidden_modules =
+    sre_agent.application

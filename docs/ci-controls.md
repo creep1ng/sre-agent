@@ -88,6 +88,20 @@ persistence incident adapter to consume incident ports. Incident runtime and
 ports cannot bring FastAPI, SQLAlchemy or HTTP client dependencies across their
 boundary. YAML and Pydantic are deliberately not forbidden.
 
+[ADR-009](adrs/ADR-009-core-ports-and-adapters.md) names the core: `vocabulary`, `governance`,
+`incident`, `investigator`, `triage`, `chat`, `bok`, `mcp` and the deploy-executor's decision
+modules. Their contracts forbid SQLAlchemy, FastAPI, Starlette, psycopg, httpx and the
+`persistence`, `gateway`, `control`, `gate`, `cli` and `application` packages (the executor's
+decisions: the frameworks, `gate`, `cli` and the process's own `app`, `docker` and `flags`). The
+imports that already break that rule on `main` are listed under `ignore_imports`, one line per
+importing module and imported module; the #1023 stack removes them and the list only shrinks.
+A new module that imports a forbidden package fails. A listed module may still add imports of
+what its line names until that line goes: any part of an external package such as `sqlalchemy`,
+or the one internal module named (`sre_agent.persistence.models` does not cover
+`sre_agent.persistence.bok`). Only
+`sre_agent.main` may import the composition root; `sre_agent.cli`, the processes that are not the
+API, may not.
+
 Mypy is strict only for `incident.persistence`, `incident.runtime`,
 `governance.dto`, and `governance.authorization`, with the Pydantic plugin.
 This is a deliberate incremental baseline: changing scope or adding a narrow
