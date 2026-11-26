@@ -27,7 +27,8 @@ What each live document covers. Start with the [vision](vision.md), then the
   [`schemas/`](../schemas/), with the release in force pinned in
   [`releases.lock.json`](../schemas/releases.lock.json).
 - Decision records: [ADR-007](adrs/ADR-007-harness.md) (investigator loop),
-  [ADR-008](adrs/ADR-008-run-events-transport.md) (run events), and the contract ADRs in
+  [ADR-008](adrs/ADR-008-run-events-transport.md) (run events),
+  [ADR-009](adrs/ADR-009-core-ports-and-adapters.md) (core, ports and adapters), and the contract ADRs in
   [`schemas/adrs/`](../schemas/adrs/).
 - Security: [threat model](security/threat-model.md) and
   [responses credential matrix](security/responses-credential-matrix.md).
