@@ -1,10 +1,8 @@
 # ADR-009: The core depends on ports; SQL, HTTP and processes are adapters
 
 - **Status:** Proposed (#1023); accepted when the first pull request of its stack merges
-- **Location:** `docs/adrs/`, like ADR-007 and ADR-008. `schemas/adrs/` is pinned by every
-  contract release: the tooling hashes each `ADR-*.md` there into release 1.0.0's inventory
-  (`schemas/tooling/lib/release-validation.mjs`), so a new file fails
-  `validate:releases:locked`. This decision does not change a contract.
+- **Location:** `docs/adrs/`, like ADR-007 and ADR-008: the tooling hashes each `ADR-*.md` of
+  `schemas/adrs/` into release 1.0.0 (`schemas/tooling/lib/release-validation.mjs`).
 
 ## Context
 
@@ -44,8 +42,8 @@ Measured on `main` `dce0dc31` (the audit of 2026-11-09 was on `0cb2ad44`):
 `gateway`, `control`, `gate`, `cli` or `application`: `vocabulary`, `governance`, `incident`,
 `investigator`, `triage`, `chat`, `bok`, `mcp`, and the deploy-executor's decisions (`catalog`,
 `operations`, `signature`, and the `decisions`, `ports` modules this stack adds). `settings.py`
-reads configuration and imports no adapter; a contract binds it once it stops importing
-`investigator.client`. `CORE` in `scripts/quality_indicators.py` stays as it is.
+and `seed_settings.py` read configuration and import no adapter; a contract binds them once
+`settings.py` stops importing `investigator.client`. `CORE` of the indicators script stays.
 
 **Ports** are `Protocol`s, with the value types and errors they carry, in a `ports` module of the
 package that owns the need: `incident/ports.py` (today's `incident/persistence.py`),
@@ -108,11 +106,11 @@ The four cases:
   and types its argument with a `Protocol` of the seven fields it stores, because
   `RequestAttribution` lives in `gateway/`, which persistence may not import.
 - **BoK publication.** `publish_bok_version` and `read_bok_version` take a `BoKStore`
-  (`bok/ports.py`); `control/bok.py` builds `PostgresBoKStore(session)` bound to its own
-  transaction, so the idempotency claim, ingest, activation and catalog projection (one identity
-  map), the response payload and the audit record still commit together. `ingest_bundle`,
-  `activate_version`, `publish_bundle` and `seed_bok_demo` move whole to `persistence/bok.py` with
-  their signatures; `BoKVersionCollision` moves to `bok/ports.py`.
+  (`bok/ports.py`; `read_version` returns values, never ORM rows); `control/bok.py` builds
+  `PostgresBoKStore(session)` bound to its own transaction, so the idempotency claim, ingest,
+  activation and catalog projection (one identity map), the response payload and the audit
+  record still commit together. `ingest_bundle`, `activate_version`, `publish_bundle` and
+  `seed_bok_demo` move whole to `persistence/bok.py`; `BoKVersionCollision` to `bok/ports.py`.
 
 ### What clients read stays
 
@@ -141,7 +139,8 @@ session factory and reach SQLAlchemy through `persistence/`.
 | `main.py` | entry point | stays |
 | every package's `__init__.py`; `bok/otel_demo_store.json` | — | stay |
 | `application.py` | composition | package `application/`: a container built once and one wiring function per plane; `create_application`, its signature, `application.state` and `REPOSITORY_ROOT` stay importable from `sre_agent.application` |
-| `settings.py` | configuration | stays; gains `GatewaySettings` (from `investigator/client.py`) and the Telegram, seed, routing and executor settings; imports no adapter |
+| `settings.py` | configuration | stays; gains `GatewaySettings` (from `investigator/client.py`) and the Telegram and executor settings; imports no adapter and no `governance`, because `executor/app.py` imports it |
+| `seed_settings.py` (new) | configuration | beside `settings.py`: `SeedSettings` and `RoutingSettings` from `persistence/seeds.py`, whose route check builds `governance.dto.ModelAlias`; the executor does not import it |
 | `release.py`, `vocabulary.py` | core | stay; `vocabulary.py` gains `OutputLanguage` (from `investigator/contract.py`) |
 | `governance/authorization.py`, `dto.py`, `resources.py` | core | stay |
 | `gateway/audit.py` | core | `governance/audit.py` (`AuditProjector`) |
@@ -153,7 +152,7 @@ session factory and reach SQLAlchemy through `persistence/`.
 | `triage/store.py` | SQL | `persistence/triage.py` |
 | `chat/outbox.py`, `digest.py`, `decisions.py`, `taps.py` | core | stay, on `chat/ports.py`; their SQL to `persistence/chat.py`; `taps.py` reaches run commands through a `RunCommands` port |
 | `chat/telegram.py` | process and Bot API client | `cli/telegram.py` |
-| `bok/owner.py`, `publication.py` | core | stay with the bundle rules, on `bok/ports.py`; their SQL to `persistence/bok.py`; `otel_demo_store.json` stays beside `owner.py` |
+| `bok/owner.py`, `publication.py` | core | stay on `bok/ports.py` with the demo bundles, `bundle_digest`, `bundle_is_ready`, the publication body and policy; `ingest_bundle`, `activate_version`, `publish_bundle`, the rules they hold and `read_bok_version`'s queries to `persistence/bok.py`; `otel_demo_store.json` stays beside `owner.py` |
 | `bok/retrieval.py` | inbound, on the gate | `gateway/http/bok.py`; `BoKOwnerRepository` to `persistence/bok.py` |
 | `mcp/owner.py` | core | stays |
 | `executor/catalog.py`, `operations.py`, `signature.py` | core | stay; `operations.py` on a container-engine port |
@@ -181,17 +180,19 @@ the messages that print a time.
 
 ## Consequences
 
-Telegram, the console, MCP and the API reach the same core through adapters (value 5). Each
-layer of the stack shows the runtime `openapi.json` and the gate route evidence identical to
-`main`, and compares requests, Telegram transcripts or command lines where it moves them. Moving
-`persistence/seeds.py` and `chat/telegram.py` changes their `python -m` paths; every caller in the
-repository changes in the same layer. The executor keeps one HTTP client per call, to keep
-behaviour identical. Of today's lines, before their SQL leaves, about 5,300 end in
-`gateway/http/` (with `bok/retrieval.py`'s router), 490 stay in `gateway/responses.py`, 2,600 in
-`gateway/usecases/` (1,337 of them `investigation.py`) and 950 in `gateway/adapters/` and the
-ports module: most governed services and their logic (`RunCommandService`,
-`IncidentQueryService`, the usage projection, `MCPGatewayService`) stay beside FastAPI, because
-the gate they run on answers HTTP.
+Telegram, the console, MCP and the API reach the same core through adapters (value 5). Each layer
+shows the runtime `openapi.json` and the gate route evidence identical to `main`, and compares
+requests, Telegram transcripts or command lines where it moves them. Moving `persistence/seeds.py`
+and `chat/telegram.py` changes their `python -m` paths; every caller in the repository changes in
+the same layer. The executor keeps one HTTP client per call, to keep behaviour identical. Three BoK
+rules end in the SQL adapter, reached through `BoKStore`: an existing version with other content
+collides; activation needs a matching, complete, ready bundle; a differing catalog entry conflicts.
+`bok/` keeps about 74 lines in `owner.py` (12 of them rules) and 157 in `publication.py`. Of
+today's lines, before their SQL leaves, about 5,300 end in `gateway/http/` (with
+`bok/retrieval.py`'s router), 490 stay in `gateway/responses.py`, 2,600 in `usecases/` (1,337 of
+them `investigation.py`) and 1,490 in `adapters/` and the ports module (516 of them the
+investigator client): most governed services (`RunCommandService`, `IncidentQueryService`, the
+usage projection, `MCPGatewayService`) stay beside FastAPI, because their gate answers HTTP.
 
 ## Alternatives
 

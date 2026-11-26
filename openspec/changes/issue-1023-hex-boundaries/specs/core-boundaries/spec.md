@@ -66,9 +66,9 @@ import `sre_agent.application`.
 ### Requirement: Clients observe nothing
 
 A change that moves code across the boundary MUST leave the runtime OpenAPI document (schema
-names included), the governed routes' gate evidence, the responses to the same requests, the
-Telegram messages, buttons and edits, and the command lines of the repository's callers
-identical to `main`.
+names included), the governed routes' gate evidence, the responses to the same requests and the
+Telegram messages, buttons and edits identical to `main`, and every caller in the repository
+MUST run a moved module from its new path in the change that moves it.
 
 #### Scenario: A router moves
 

@@ -15,11 +15,11 @@
 - [ ] 2.3 Audit ports: `AuditStore` to `governance/ports.py`, the stores to `persistence/audit.py`,
   `AuditProjector` to `governance/audit.py`
 - [ ] 2.4 `settings.py` without the investigator; the investigator's client to `gateway/adapters/`
-- [ ] 2.5 Triage on a unit of work; its SQL to `persistence/triage.py`
+- [ ] 2.5 Triage on a unit of work; its SQL to `persistence/triage.py`, `triage_unit.py`
 - [ ] 2.6 Telegram's process to `cli/`; chat renderers, outbox, delivery, taps, decisions and
   digest on ports and units of work; Telegram settings
-- [ ] 2.7 `bok` retrieval to `gateway/http/`, its SQL to `persistence/bok.py`
-- [ ] 2.8 Seeds to `cli/`
+- [ ] 2.7 `bok` retrieval to `gateway/http/`; its SQL and version rules to `persistence/bok.py`
+- [ ] 2.8 Seeds to `cli/`, their settings to `seed_settings.py`
 - [ ] 2.9 Executor: journal, decision without `Request`, container-engine port, settings
 - [ ] 2.10 `gateway/`: ports and outbound adapters, SQL to `persistence/`, then `usecases/` and
   `http/` by whole-module moves
