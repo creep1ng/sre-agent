@@ -4,9 +4,9 @@ include_external_packages = True
 
 # ADR-009 (docs/adrs/ADR-009-core-ports-and-adapters.md): the core imports no framework and no
 # adapter. Each ignore_imports line is a violation on main that a later layer of the #1023 stack
-# removes; the lists only shrink, and no change adds a line to pass. One line covers every import
-# of the named package by the named module, so a module that is listed may still add imports of
-# the same package until its line goes.
+# removes; the lists only shrink, and no change adds a line to pass. A line covers the imports of
+# exactly what it names: any part of an external package (`sqlalchemy`), or that one module of
+# ours (`sre_agent.persistence.models`, not `sre_agent.persistence.bok`).
 
 [importlinter:contract:incident-does-not-use-concrete-adapters]
 name = Incident core does not use concrete adapters

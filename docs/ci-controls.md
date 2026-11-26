@@ -94,9 +94,11 @@ modules. Their contracts forbid SQLAlchemy, FastAPI, Starlette, psycopg, httpx a
 `persistence`, `gateway`, `control`, `gate`, `cli` and `application` packages (the executor's
 decisions: the frameworks, `gate`, `cli` and the process's own `app`, `docker` and `flags`). The
 imports that already break that rule on `main` are listed under `ignore_imports`, one line per
-importing module and imported package; the #1023 stack removes them and the list only shrinks.
-A new module that imports a forbidden package fails. A listed module may still add imports of the
-package its line names until that line goes, because one line covers every such import. Only
+importing module and imported module; the #1023 stack removes them and the list only shrinks.
+A new module that imports a forbidden package fails. A listed module may still add imports of
+what its line names until that line goes: any part of an external package such as `sqlalchemy`,
+or the one internal module named (`sre_agent.persistence.models` does not cover
+`sre_agent.persistence.bok`). Only
 `sre_agent.main` may import the composition root; `sre_agent.cli`, the processes that are not the
 API, may not.
 
