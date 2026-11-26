@@ -170,6 +170,11 @@ Use `connect-mcp` to consume that environment from SRE; see the
 lifetime and is stopped after transfer. Neither port opens public ingress.
 The local relay holds no MCP/provider/AWS keys and publishes no host port.
 
+On a fresh instance, run `prepare-mcp` only after `/var/log/cloud-init-output.log` reports that
+Cloud-init finished. Cloud-init's final `compose up` undoes an earlier run: Grafana loses its 1G
+memory limit and the alert-intake environment. If it ran too early, run `prepare-mcp` again;
+`docker inspect -f '{{.HostConfig.Memory}}' grafana` on the instance then prints `1073741824`.
+
 The producer's `fail`/`reset` operations apply the manifest's declared flag/baseline
 and retain synthetic traffic. They replace the flag file and do not restart flagd: flagd
 reloads it within ~1 s and keeps its clients' streams open (#724). A restart broke
