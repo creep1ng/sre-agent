@@ -8,9 +8,8 @@ template is a guide for the author and the reviewer.
 ## Author path
 
 1. Reference the issue. Use `Refs #183` for a partial work unit; do not close an
-   issue whose criteria remain pending. Declare `direct` or `sdd` as the delivery route.
+   issue whose criteria remain pending.
 2. Map each covered criterion to its scenario, actual result and HTTPS evidence.
-   For SDD include the shared `openspec/changes/` or `openspec/specs/` path.
 3. Record full tested and base commit SHAs, environment versions, data provenance,
    prerequisites and commands in a `sh`, `bash` or `shell` fenced block. The PR's
    reproduction commands must invoke `docker compose` or `docker run`; `uv`, `npm`,
@@ -19,7 +18,10 @@ template is a guide for the author and the reviewer.
 4. Attach a real screenshot to the PR (see [Where evidence lives](#where-evidence-lives)). Optionally attach a real recording; without one, write the exact no-video sentence instead. Use an appropriate rendered artifact for documentation; do not invent a running server for a textual or contract change.
 5. Explain expected/actual results, remaining scope, compatibility and rollback.
    Sanitize all evidence, then declare exactly `Sanitized: yes` in Security.
-6. Obtain ordinary independent human review. CI does not prove semantic acceptance.
+6. Have an independent agent verify the change against the criteria and the evidence, resolve
+   its findings, and record the result under `Agent verification`
+   ([team workflow](team-workflow.md#agent-verification)).
+7. Obtain ordinary independent human review. CI does not prove semantic acceptance.
 
 Inspect candidate identity and size without running PR-provided commands:
 

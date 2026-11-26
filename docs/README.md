@@ -43,11 +43,11 @@ What each live document covers. Start with the [vision](vision.md), then the
 
 ## Delivering a change
 
-- [Team workflow](team-workflow.md): triage to integration, and the direct and SDD routes.
+- [Team workflow](team-workflow.md): triage to integration, including the mandatory agent verification.
 - [PR evidence](pr-evidence.md): the required evidence and the containerized reproduction.
 - [Code-quality indicators](quality-indicators.md) of EP-14.
 - [CI control inventory](ci-controls.md) and [governance rollout](governance-rollout.md).
-- SDD artifacts live in [`openspec/`](../openspec/).
+- Historical SDD artifacts (no longer used for new work) live in [`openspec/`](../openspec/).
 
 ## Design and research
 

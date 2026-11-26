@@ -4,12 +4,12 @@
 ## Summary
 <!-- What changed and why. -->
 
-## Delivery route
-<!-- Write exactly direct or sdd. Link shared OpenSpec artifacts below for SDD. -->
-
 ## Acceptance evidence
-<!-- Map each covered criterion to scenario, actual result and HTTPS evidence.
-For SDD include the openspec/changes/ or openspec/specs/ path. -->
+<!-- Map each covered criterion to scenario, actual result and HTTPS evidence. -->
+
+## Agent verification
+<!-- Which agent verified the change (not the one that wrote it), at which SHA, its findings,
+and how each was resolved or why it does not apply. -->
 
 ## Pending criteria
 <!-- List remaining scope, or write None with an explanation. -->
@@ -57,6 +57,7 @@ The human reviewer evaluates freshness before merging. -->
 ## Definition of Done
 - [ ] Every covered criterion has current, reproducible evidence.
 - [ ] Relevant tests and applicable lint/build/contract checks pass.
+- [ ] An independent agent verified the change and its findings are resolved.
 - [ ] A human reviewer verified the result and scope, not only green checks.
 - [ ] No known critical defect remains in the delivered scope.
 
