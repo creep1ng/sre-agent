@@ -18,12 +18,7 @@ one package per layer behind its ports without changing what any client observes
 - `.importlinter`: every core unit forbids the ADR's whole list, with today's violations listed
   as `ignore_imports`; `cli` is forbidden to the core and may not compose; later layers remove
   the listed lines.
-- Later layers of the same stack: `incident/persistence.py` to `incident/ports.py`, the audit
-  ports, settings without adapters, the investigator's HTTP client to `gateway/adapters/`,
-  `triage` and `chat` on units of work, the Telegram and seed processes to `cli/`, `bok` behind
-  ports, the executor's decision without `Request`, `gateway/` split into `http`, `usecases` and
-  `adapters`, `create_application` over a container built once, and the sweep of `#NNN`
-  references in `src/`.
+- Later layers of the same stack, one package each, as `tasks.md` lists them.
 
 ### Out of Scope
 
